@@ -16,7 +16,7 @@ from fastapi import HTTPException, UploadFile
 
 
 
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 MAX_UPLOAD = 80 * 1024 * 1024
 MAX_SECONDS = 900
 MAX_EXTRACT_CHARS = 47000

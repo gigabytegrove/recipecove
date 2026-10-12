@@ -4,9 +4,6 @@ services:
     container_name: recipe-importer
     restart: unless-stopped
     environment:
-      KITCHENOWL_URL: ${KITCHENOWL_URL:?Set KITCHENOWL_URL in .env}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
       WHISPER_TIMEOUT_SECONDS: ${WHISPER_TIMEOUT_SECONDS:-780}
       OMP_NUM_THREADS: "1"
