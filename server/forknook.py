@@ -29,6 +29,7 @@ import recipes
 import forknook_images
 import media
 import updater
+import forknook_deploy
 import settings_store
 
 router = APIRouter(prefix="/api/v2", tags=["Forknook"])
@@ -833,21 +834,69 @@ async def import_json(file:UploadFile=File(...),dry_run:bool=True,who:dict=Depen
     return {'dry_run':False,'found':len(entries),'valid':len(candidates),'imported':added,'skipped':len(candidates)-added,
             'source_unchanged':True}
 
-@router.get("/admin/updates/status")
+class DokployConnection(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+    compose_id: str = Field(min_length=3, max_length=128)
+    api_key: str | None = Field(default=None, max_length=4096)
+
+
+@router.get('/admin/updates/config')
+def updates_config(who:dict=Depends(admin)):
+    return forknook_deploy.current()
+
+
+@router.put('/admin/updates/config')
+def updates_configure(body:DokployConnection,who:dict=Depends(admin)):
+    return forknook_deploy.configure(body.url,body.compose_id,body.api_key)
+
+
+@router.delete('/admin/updates/config')
+def updates_disconnect(who:dict=Depends(admin)):
+    return forknook_deploy.clear()
+
+
+@router.post('/admin/updates/verify')
+async def updates_verify(who:dict=Depends(admin)):
+    return await forknook_deploy.verify()
+
+
+@router.get('/admin/updates/status')
 def updates_status(who:dict=Depends(admin)):
     return {'installed':updater.installed(),'operation':updater.state(),
             'running_version':__import__('app').VERSION,
-            'image_version':os.environ.get('RI_IMAGE_VERSION','unknown')}
+            'image_version':os.environ.get('RI_IMAGE_VERSION','unknown'),
+            'dokploy':forknook_deploy.current()}
 
-@router.post("/admin/updates/check")
+
+@router.post('/admin/updates/check')
 async def updates_check(who:dict=Depends(admin)):
-    return await run_in_threadpool(updater.check)
+    try:
+        return await run_in_threadpool(updater.check)
+    except Exception as exc:
+        import logging
+        logging.getLogger('forknook.updater').exception('Update check failed')
+        raise HTTPException(502,'Could not check updates. Check container logs under forknook.updater.') from exc
 
-@router.post("/admin/updates/install",status_code=202)
+
+@router.post('/admin/updates/install',status_code=202)
 def updates_install(who:dict=Depends(admin)):
     return updater.install()
 
-@router.post("/admin/updates/rollback",status_code=202)
+
+class DockerUpdateRequest(BaseModel):
+    version: str = Field(min_length=5,max_length=25)
+
+
+@router.post('/admin/updates/install-image',status_code=202)
+async def updates_install_image(body:DockerUpdateRequest,who:dict=Depends(admin)):
+    # Avoid using the client-provided version as an arbitrary registry tag.
+    check=await run_in_threadpool(updater.check)
+    if not check.get('image_available') or check.get('latest_image_version')!=body.version:
+        raise HTTPException(409,'Requested image is not the currently published Forknook update')
+    return await forknook_deploy.deploy(body.version)
+
+
+@router.post('/admin/updates/rollback',status_code=202)
 def updates_rollback(who:dict=Depends(admin)):
     return updater.rollback()
 

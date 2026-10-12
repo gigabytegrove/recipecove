@@ -218,9 +218,98 @@ async function renderAdminImports(){
  container.append(imports);
  content.replaceChildren(adminSectionNav(),container);
 }
+async function renderUpdaterPanel(){
+ const status=node('p',{class:'muted',role:'status',text:'Loading update information…'});
+ const notice=node('p',{class:'muted small',role:'status',text:''});
+ const error=node('p',{class:'warning',role:'alert',hidden:true});
+ const progress=node('progress',{value:'0',max:'100',style:'width:100%;height:16px'});
+ const latest=node('p',{class:'muted',text:'Checking for available versions…'});
+ const btnCheck=button('Check for updates',check,'primary');
+ const btnCode=button('Install server and UI update',installCode,'secondary');
+ const btnImage=button('Update Docker image through Dokploy',installImage,'secondary');
+ btnCode.disabled=true;btnImage.disabled=true;
+ const dokployStatus=node('p',{class:'muted small',text:'Not connected'});
+ const url=node('input',{type:'url',placeholder:'https://dokploy.example.com'});
+ const compose=node('input',{placeholder:'Dokploy Compose application ID'});
+ const secret=node('input',{type:'password',placeholder:'Dokploy API key (leave empty to retain current key)',autocomplete:'new-password'});
+ const configure=button('Save Dokploy connection',async()=>{
+   const config=await api('/admin/updates/config',{method:'PUT',data:{url:url.value.trim(),compose_id:compose.value.trim(),api_key:secret.value||null}});
+   secret.value='';dokployStatus.textContent='Connection saved. Verify Compose configuration before deploying.';
+   await verifyConnection();
+ },'primary');
+ const verify=button('Verify connection',verifyConnection);
+ const disconnect=button('Disconnect',async()=>{
+   if(!confirm('Remove the saved Dokploy API key from Forknook?'))return;
+   await api('/admin/updates/config',{method:'DELETE'});
+   dokployStatus.textContent='Disconnected';btnImage.disabled=true;
+ });
+ const main=card(node('h2',{text:'Application updates'}),
+  node('p',{class:'muted',text:'Update Forknook here. Compatible code and UI releases install inside this container; full Docker image updates are performed securely through your existing Dokploy installation.'}),
+  status,progress,latest,error,node('div',{class:'toolbar'},btnCheck,btnCode,btnImage),notice);
+ const connection=card(node('h2',{text:'Dokploy connection · One-time setup'}),
+  node('p',{class:'muted',text:'To update the Docker image directly from Forknook, connect this installation to its existing Dokploy Compose application. No Docker socket or extra container is required. Use an API key with access limited to this deployment.'}),
+  node('div',{class:'form-grid'},node('label',{},'Dokploy URL',url),node('label',{},'Compose ID',compose),node('label',{class:'full'},'Dokploy API key',secret)),
+  node('div',{class:'toolbar'},configure,verify,disconnect),dokployStatus,
+  node('p',{class:'small muted',text:'Important: your Dokploy Compose service must use ghcr.io/gigabytegrove/forknook:latest with pull_policy: always. Without this, Dokploy can recreate the old cached image. No volumes are deleted.'}));
+ content.replaceChildren(adminSectionNav(),main,connection);
+ let latestCheck=null,active=false;
+ function report(message){error.textContent=message;error.hidden=false;notice.textContent=message;}
+ async function refresh(){
+  if(model.page!=='admin-updates'||!model.user)return;
+  try{
+   const result=await api('/admin/updates/status');const op=result.operation||{},installed=result.installed||{};
+   progress.value=Number(op.progress||0);
+   status.textContent='Running '+(result.running_version||'unknown')+' · Docker image '+(result.image_version||'unknown')+' · updater '+(installed.version||'unknown')+' · '+(op.phase||'idle');
+   if(op.message)notice.textContent=op.message;
+   if(op.phase==='failed'&&op.message)report('Update failed: '+op.message);
+  }catch(e){report('Cannot read update status: '+e.message)}
+ }
+ async function check(){
+  if(active)return;active=true;btnCheck.disabled=true;error.hidden=true;
+  latest.textContent='Checking published Forknook releases and Docker images…';
+  try{
+   latestCheck=await api('/admin/updates/check',{method:'POST'});
+   const data=latestCheck;
+   const codeMsg=data.latest_version?('Latest server/UI release: '+data.latest_version):'No server/UI release available';
+   const imageMsg=data.latest_image_version?('Latest Docker image: '+data.latest_image_version):'No newer published Docker image found';
+   latest.textContent=codeMsg+' · '+imageMsg;
+   btnCode.disabled=!data.available;
+   btnImage.disabled=!data.image_available;
+   if(data.code_error)notice.textContent=data.code_error;
+   else if(!data.available&&!data.image_available)notice.textContent='Forknook is up to date, or no newer verified release is available.';
+   else notice.textContent='Choose the available update type below.';
+  }catch(e){btnCode.disabled=true;btnImage.disabled=true;report('Update check failed: '+e.message)}
+  finally{active=false;btnCheck.disabled=false}
+ }
+ async function installCode(){
+  if(!latestCheck?.available)return;
+  if(!confirm('Install the verified Forknook code and UI update and restart the application?'))return;
+  try{await api('/admin/updates/install',{method:'POST'});btnCode.disabled=true;notice.textContent='Installing verified code package. Forknook will restart automatically; keep this tab open.';
+  }catch(e){report('Code update failed: '+e.message)}
+ }
+ async function installImage(){
+  const version=latestCheck?.latest_image_version;
+  if(!latestCheck?.image_available||!version)return;
+  if(!confirm('Update the Forknook Docker image to '+version+' through Dokploy? Your /data volume will remain mounted.'))return;
+  try{await api('/admin/updates/install-image',{method:'POST',data:{version}});
+   btnImage.disabled=true;notice.textContent='Dokploy deployment started. Forknook may disconnect briefly. Reload after the new image is ready.';
+  }catch(e){report('Dokploy update failed: '+e.message)}
+ }
+ async function verifyConnection(){
+  try{const result=await api('/admin/updates/verify',{method:'POST'});dokployStatus.textContent=result.message||'Dokploy connection verified';
+  }catch(e){dokployStatus.textContent='Dokploy verification failed: '+e.message}
+ }
+ try{const cfg=await api('/admin/updates/config');url.value=cfg.url||'';compose.value=cfg.compose_id||'';
+  dokployStatus.textContent=cfg.configured?'Connection saved (API key hidden)':'No Dokploy connection configured';
+ }catch(e){report(e.message)}
+ await refresh();await check();
+ if(model.updaterTimer)clearInterval(model.updaterTimer);
+ model.updaterTimer=setInterval(()=>{if(model.page==='admin-updates'&&model.user)refresh();else clearInterval(model.updaterTimer)},5000);
+}
+
 async function renderApiPanel(){
- const keys=await api('/admin/api-keys');const box=card(node('h2',{text:'WordPress and external integrations'}),node('p',{class:'muted',text:'Forknook v2 provides a stable, read-only API for published recipes. Keep family notes and unapproved recipes private. API keys are shown only once.'}));
- const field=node('input',{placeholder:'e.g. Gigabyte Grove WordPress'});
+ const keys=await api('/admin/api-keys');const box=card(node('h2',{text:'Developer API for future integrations'}),node('p',{class:'muted',text:'Forknook v2 provides a stable, read-only API for published recipes. Keep family notes and unapproved recipes private. API keys are shown only once.'}));
+ const field=node('input',{placeholder:'e.g. Website recipe integration'});
  box.append(node('div',{class:'toolbar'},field,button('Create read-only API key',async()=>{if(!field.value.trim())throw Error('Name the API key');const result=await api('/admin/api-keys',{method:'POST',data:{label:field.value}});const message=node('div',{class:'warning'},node('strong',{text:'Copy this key now; it cannot be shown again.'}),node('pre',{class:'evidence-text',text:result.key}));box.append(message,button('Copy key',()=>navigator.clipboard.writeText(result.key)));announce('API key created')},'primary')));
  for(const key of keys)box.append(node('div',{class:'list-row'},node('strong',{text:key.label}),node('span',{class:'small muted',text:key.revoked_at?'Revoked':'Active · '+key.scope}),button('Revoke',async()=>{if(!confirm('Revoke this key immediately?'))return;await api('/admin/api-keys/'+key.id,{method:'DELETE'});renderApiPanel()})));
  box.append(node('h3',{text:'API endpoints'}),node('p',{class:'muted',text:'GET /api/v2/public/recipes?page=1&limit=20  ·  GET /api/v2/public/recipes/{id}  ·  GET /api/v2/openapi.json'}),node('p',{class:'small muted',text:'Send X-Forknook-API-Key in the request header. Publication is opt-in and requires an approver.'}));
@@ -230,6 +319,7 @@ async function renderAdmin(){if(model.user.role!=='admin'){content.replaceChildr
 if(model.page==='admin-imports')return renderAdminImports();
 if(model.page==='admin-review')return renderReview();
 if(model.page==='admin-api')return renderApiPanel();
+if(model.page==='admin-updates')return renderUpdaterPanel();
 const [stats,users,aiSettings]=await Promise.all([api('/admin/overview'),api('/admin/users'),api('/admin/ai')]);const metrics=node('div',{class:'grid'});for(const [label,key] of [['Family members','users'],['Saved recipes','recipes'],['Planned meals','meal_plan'],['Shopping lists','shopping_lists'],['Subscribed feeds','feeds']])metrics.append(card(node('div',{class:'stat',text:String(stats[key]||0)}),node('strong',{text:label})));const userlist=card(node('h2',{text:'Family accounts'}));for(const u of users)userlist.append(node('div',{class:'list-row'},node('div',{},node('strong',{text:u.display_name+' ('+u.username+')'}),node('p',{class:'muted small',text:u.role+' · '+(u.enabled?'Enabled':'Disabled')})),button('Edit',()=>editUser(u))));const uname=node('input',{placeholder:'Username'}),display=node('input',{placeholder:'Display name'}),password=node('input',{type:'password',placeholder:'Password (12+ characters)'}),role=node('select');for(const [value,title] of [['viewer','Viewer'],['contributor','Contributor — can submit recipes'],['approver','Approver — can approve & edit'],['admin','Administrator']])role.append(node('option',{value,text:title}));role.value='contributor';userlist.append(node('h3',{text:'Add family member'}),node('div',{class:'toolbar'},uname,display,password,role,button('Create user',async()=>{await api('/admin/users',{method:'POST',data:{username:uname.value,display_name:display.value,password:password.value,role:role.value}});announce('User added');navigate('admin-users',{push:false})},'primary')));
 const migrationInput=node('input',{type:'file'});migrationInput.accept='.json,application/json';const migration=card(node('h2',{text:'Migration & backups'}),node('p',{class:'muted',text:'Export your Forknook data as JSON, or preview and copy recipes from an existing KitchenOwl JSON export. Existing KitchenOwl data is never altered.'}),button('Download Forknook JSON backup',async()=>{const backup=await api('/admin/export'),blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),href=URL.createObjectURL(blob),a=node('a',{href,download:'forknook-export.json'});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000)},'primary'),node('label',{},'KitchenOwl recipe JSON export',migrationInput),button('Preview migration',()=>runMigration(migrationInput,true)),button('Import compatible recipes',async()=>{if(!confirm('Copy valid recipes into Forknook? KitchenOwl will remain unchanged.'))return;await runMigration(migrationInput,false)}));const updateStatus=node('p',{id:'updater-data',class:'muted',text:'Checking installed version…'}),updateBar=node('progress',{id:'updater-progress',value:'0',max:'100',style:'width:100%;height:20px'});
 const updateCheck=button('Check for updates',async()=>{updateStatus.textContent='Checking GitHub Releases…';const data=await api('/admin/updates/check',{method:'POST'});updateStatus.textContent=data.available?'Version '+data.latest_version+' available. Installed: '+data.current_version:'Running '+data.current_version+' · newest in-app release '+data.latest_version+' (Docker image updates are separate)';model.updateAvailable=Boolean(data.available);updateInstall.disabled=!model.updateAvailable},'primary');

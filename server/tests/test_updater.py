@@ -60,6 +60,7 @@ def patches(tmp_path,monkeypatch):
     release,blob=make_release(server)
     def read(url,maxsize=None):
         if url==updater.API: return json.dumps(release).encode()
+        if url.endswith('/server/update_release.json'): return json.dumps({'version':'2.1.0','requires_image':False}).encode()
         if url.endswith('.sha256'):return hashlib.sha256(blob).hexdigest().encode()
         if url.endswith('.tar.gz'):return blob
         raise RuntimeError('Unrecognized download URL')
@@ -78,11 +79,11 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'2.1.2' in result['app.py']
+    assert result['app.py'] and b'2.1.3' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))
-    with pytest.raises(ValueError,match='requirements.txt'):
+    with pytest.raises(ValueError,match='Python dependencies'):
         updater._verified_files(r)
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: b'0'*64 if u.endswith('.sha256') else original(u,n))
     with pytest.raises(ValueError,match='checksum mismatch'):
