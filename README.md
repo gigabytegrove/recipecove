@@ -1,102 +1,98 @@
-# Recipe Bridge 1.0.0
+# Recipe Importer 1.1.0
 
-An Android share-target app for your existing KO-Pellet/KitchenOwl installation, with an optional self-hosted Instagram/video speech + OCR extractor.
+**One Docker container. One native Android app. Direct KitchenOwl integration. No KO-Pellet or bridge.**
 
-## What works in this implementation
+This self-hosted recipe importer parses regular recipe websites, pasted text, photographs/screenshots, public Instagram Reels and locally shared video files, then displays an editable preview. Recipes are only written to KitchenOwl after a person explicitly confirms the save. The native Android app registers in the Android Share menu, so links shared from Instagram or a browser open directly in Recipe Importer.
 
-- Android **Share → Recipe Bridge** for text, web links, images, and video files.
-- Automatic extraction when the app is already connected; otherwise keeps the share and prompts for sign-in.
-- KO-Pellet native KitchenOwl login, with a web-login option for other cookie-based sign-in configurations.
-- Encrypted session cookies and video extractor token stored in Android Keystore-backed preferences.
-- Household chooser, duplicate-title checks, editable recipe preview (ingredients, steps, prep/cook, notes, source), and explicit save.
-- Existing KO-Pellet handles ordinary recipe URLs, plain text, images, and KitchenOwl saves.
-- Optional video extractor handles public Instagram `/reel/`, `/p/`, `/tv/` links and directly shared video files; transcribes audio with local Whisper, samples video frames for local OCR, and sends extracted text to KO-Pellet's existing `/api/parse/text`.
-- Video processing on the Docker host, not the wife's Android device.
+## Features
 
-**Important limitations:** Instagram can block automated video access and private/login-only posts may fail. Instagram sharing sometimes sends only a link; a direct file share can be an alternative. Local speech/OCR can mishear measurements; KO-Pellet's parsing accuracy varies with its AI setup. Nothing automatically creates a recipe without pressing Save. This project does not bypass Instagram authentication or guarantee extraction of private posts.
+- KitchenOwl username/password authentication, per-device sessions, rotating KitchenOwl access tokens, stored server-side in an SQLite volume.
+- Household selection, duplicate-name checks, and direct KitchenOwl recipe creation.
+- A responsive web app included in **the same Docker container**. No frontend service or separate media-extractor container.
+- Ordinary recipe URL parsing from Schema.org JSON-LD `Recipe` and recipe-like page markup; SSRF checks block private or reserved IPs, redirects are individually validated, and response sizes are limited.
+- Text and image OCR using a local Tesseract install.
+- Instagram public Reel/post extraction using `yt-dlp`, local Whisper transcription, and on-screen OCR sampled by FFmpeg; uploaded videos use the same pipeline. Instagram rate limits, authentication restrictions, and changes to the platform can prevent fetching some posts.
+- Optional OpenAI text structuring: set `OPENAI_API_KEY` only if desired. Otherwise the built-in deterministic text parser works for straightforward recipes, but unstructured speech/OCR may need more manual editing. Local video speech/OCR itself requires **no paid API**.
+- Native Android APK with share targets for `text/plain`, `image/*`, and `video/*`; source preview and editing prior to save, encrypted session storage on the phone.
 
-## Requirements
+## Install the only Docker container
 
-- Running KO-Pellet from https://github.com/Tiscin/ko-pellet and a reachable KitchenOwl server.
-- KO-Pellet's default native KitchenOwl login OR a working KO-Pellet web login.
-- Android 8.0 or later.
-- Android Studio with Android SDK Platform 35, and JDK 17 for local builds, OR GitHub Actions.
-- Optional video support: Docker Compose host with internet access to load Whisper model and public Instagram content. Approx. 3 GB available memory for video processing.
+Clone the repository on your Docker host and configure KitchenOwl's address:
 
-## Build the installable APK
+```bash
+# In the cloned recipe-importer repository
+cd server
+cp .env.example .env
+# Edit .env and set KITCHENOWL_URL to an actual URL reachable from this container.
+docker compose up -d --build
+curl -f http://127.0.0.1:8999/health
+```
 
-### Windows
+The startup health endpoint returns a JSON object with `status: ok` and `version: 1.1.0`. If your selected address is not `127.0.0.1`, change the `curl` address accordingly. Open `http://YOUR-HOST:8999` to access the included browser importer. Sign in with your KitchenOwl credentials. The server does **not** require KO-Pellet and does not connect to it.
 
-1. Install Android Studio, **Android SDK Platform 35**, and JDK 17 (Android Studio includes a compatible runtime).
-2. Extract this ZIP. Open PowerShell in the `android` directory.
-3. Run `powershell -ExecutionPolicy Bypass -File .\build-apk.ps1`.
-4. The finished APK is `android/recipe-bridge-1.0.0-debug.apk`.
-5. Copy the APK to the Android phone and install it with *Install unknown apps* allowed for the file manager.
+An optional GitHub Actions Docker publishing workflow builds an `amd64` image at `ghcr.io/gigabytegrove/recipe-importer:latest` on pushes to `main`. If your GHCR package is accessible to your Docker host, you can switch the compose service from `build: .` to `image: ghcr.io/gigabytegrove/recipe-importer:latest`, then future updates are simply:
 
-The PowerShell builder downloads the pinned Gradle distribution, verifies its SHA-256 against Gradle's published checksum, generates an official Gradle wrapper, and builds the APK. The first build needs internet access to download Android Gradle Plugin dependencies. If you already use Android Studio, you can also import `android/` as a project and generate the wrapper with a local Gradle installation.
+```bash
+docker compose pull && docker compose up -d
+```
 
-### Linux/macOS
+You do not need to edit the compose file for each software version. GHCR package accessibility and workflow success must be verified before relying on the published image. The source-build command above always works without GHCR. The container persists its sessions database and Whisper model downloads in named volumes; rebuilds keep those volumes. Back up the `recipe-importer-data` Docker volume, which includes active session tokens.
 
-Set `ANDROID_HOME` to the Android SDK location and run `bash android/build-apk.sh`.
+### Required settings
 
-### GitHub Actions
+In `server/.env`: `KITCHENOWL_URL` (required); `PORT`, `BIND_ADDRESS`, and `WHISPER_MODEL` (optional). You may optionally set `OPENAI_API_KEY` and `OPENAI_MODEL` for AI recipe structuring. Without a configured AI API key, the text parser marks unstructured material low-confidence for user review.
 
-The GitHub Actions workflow is located at `.github/workflows/build-apk.yml`. Push the complete project to the repository root and run **Build Recipe Bridge APK** from the Actions tab. The workflow uploads a `recipe-bridge-1.0.0-debug` APK artifact. It can also be triggered manually from the Actions tab. A debug APK is installable for personal sideloading, but **do not treat it as a signed release APK** for store publication; configure release signing for that separately.
+Use HTTPS via your existing reverse proxy for access from outside a trusted LAN. A plain `http://` URL sends login credentials and app session tokens unencrypted. Do not expose an HTTP-only importer to the public Internet. Optional Instagram cookie export mounts are commented out in `server/compose.yaml` and must be used only for content you are permitted to access. No login bypass is provided.
 
-## Optional Docker video extractor
+### Android APK
 
-1. On your Docker host, copy `server/` into a directory.
-2. Run `cd server && cp .env.example .env`.
-3. Edit `.env`: set a private 32-byte random token, e.g. generated using `openssl rand -hex 32`.
-4. Run `docker compose up -d --build`.
-5. Confirm `curl http://YOUR-DOCKER-HOST:8999/health` returns `{ "status": "ok", ... }`.
-6. On your wife's phone in Recipe Bridge → Settings, set the video extractor URL (`http://YOUR-DOCKER-HOST:8999`) and its token; save settings.
+Source is in `android/`. Android Studio with Android SDK Platform 35, Android Gradle Plugin 8.9.2 and JDK 17 is required to build locally.
 
-The first media import downloads the `base` Whisper model to the persistent Docker volume. Media runs on the Docker host using open-source `faster-whisper`, `ffmpeg`, `tesseract` and `yt-dlp`. There are no required paid AI keys for extraction. KO-Pellet may optionally use your existing AI configuration for higher-quality recipe structuring.
+Windows PowerShell:
 
-Security: do not expose the extractor unprotected to the public Internet. The bearer token is mandatory. Prefer HTTPS through a reverse proxy for any off-LAN use. Docker drops Linux capabilities, runs as a non-root user, mounts the filesystem read-only, and caps uploaded videos at 80 MB and video length at 15 minutes.
+```powershell
+cd android
+powershell -ExecutionPolicy Bypass -File .\build-apk.ps1
+```
 
-Instagram video links may require cookies to fetch some public/account-restricted posts. If authorized to use a cookie export, mount it to `/run/secrets/instagram_cookies.txt` using the commented Compose volume. Keep that file private and never commit it. Platform changes can break download support over time.
+Linux/macOS (with SDK environment configured):
 
-## Using the Android app
+```bash
+bash android/build-apk.sh
+```
 
-1. Launch Recipe Bridge once, open Settings, enter the KO-Pellet URL and sign in.
-2. Confirm the desired KitchenOwl household loads; select it.
-3. In Instagram, a browser, or the Gallery, press **Share → Recipe Bridge**.
-4. The app extracts content and displays a draft. Edit any recipe details.
-5. Press **Add to KitchenOwl**, then confirm if a matching recipe title already exists.
+Alternatively, from GitHub **Actions → Build Recipe Importer APK → Run workflow**, download the uploaded `recipe-importer-1.1.0-debug` artifact after it succeeds. The APK is for personal sideloading (debug-signed), not for publishing on Google Play. Installing it requires the Android **Install unknown apps** permission for your selected installer.
 
-If a Reel cannot be fetched, use a locally shared video file, screenshot, or copy-paste the creator's recipe caption. If KO-Pellet cannot produce a useful recipe, manually complete the preview fields before saving. Neither the extractor nor the app promises accuracy from inaccessible content.
+On the phone: launch Recipe Importer → Settings → enter the URL of **your new Recipe Importer server** → sign in with the KitchenOwl username/password → pick the household. Then share an Instagram Reel, URL, image or video directly to Recipe Importer. Review and edit the preview, check the duplicate warning, and confirm Add to KitchenOwl.
+
+The APK compilation and live Instagram fetching are not verifiable in this source environment; CI and your actual KitchenOwl host will confirm those. Test a regular recipe website and a short public Reel before treating the new service as a complete replacement for your installed KO-Pellet.
 
 ## Architecture
 
 ```
-Android ACTION_SEND
-  → Recipe Bridge native Android app
-      → ordinary URL / text / image → KO-Pellet existing parse APIs
-      → Instagram / video → authenticated optional Docker extractor
-          → caption + local Whisper audio + frame OCR → KO-Pellet /api/parse/text
-      → editable preview (no automatic saves)
-      → KO-Pellet duplicate check
-      → POST /api/kitchenowl/recipe/{household_id}
-          → KitchenOwl
+Android share sheet ──> Recipe Importer Android APK ─┐
+                                                    │
+Web browser ──> Recipe Importer web UI ──────────────┤
+                                                    ▼
+                         ┌────────────────────────────────────────┐
+                         │    Recipe Importer (ONE container)     │
+                         │  authentication and KitchenOwl API     │
+                         │  HTML/JSON-LD recipe scraper           │
+                         │  text + image OCR parser               │
+                         │  Instagram / video + Whisper / FFmpeg  │
+                         │  optional AI text structuring         │
+                         └──────────────────┬─────────────────────┘
+                                            │ confirmed saves only
+                                            ▼
+                                        KitchenOwl
 ```
 
-## Tests
-
-Backend unit/API tests (on a development machine):
+## Developer tests
 
 ```bash
 cd server
-python -m pip install fastapi httpx pytest python-multipart
+python -m pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-Android APK compilation requires the Android SDK and Gradle dependencies. Those are not available in the artifact author's execution environment; therefore this release contains **buildable Android source rather than an already-compiled APK**. Server unit/API tests are run during packaging, but real Instagram fetching and end-to-end KitchenOwl integration require your services and credentials.
-
-## Not in version 1.0
-
-- Offline video analysis directly on Android (intentionally runs on Docker host).
-- Bypassing Instagram login/robots/private access restrictions.
-- Recipe parsing that magically reconstructs missing steps or amounts. The UI is explicitly for verification.
-- Merging with or replacing KO-Pellet's server. It stays unchanged.
+Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.1.0, intended for testing and verification on your network before migrating all recipe imports.

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recipe Importer</title><style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#192e3c;background:#f3f6f9}*{box-sizing:border-box}
+body{margin:0}.shell{max-width:1040px;margin:0 auto;padding:28px 18px 72px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
+.brand{font-size:1.5rem;font-weight:780;letter-spacing:-.04em}.brand span{color:#2374cb}.muted{color:#647784}.card{border:1px solid #dbe4eb;background:#fff;border-radius:18px;padding:22px;margin:14px 0;box-shadow:0 5px 22px #203d550b}
+h1{font-size:1.7rem;letter-spacing:-.04em;margin:0 0 8px}h2{font-size:1.22rem;margin:0 0 16px}h3{font-size:1rem;margin:18px 0 9px}
+label{display:block;font-size:.84rem;font-weight:700;color:#456071;margin:12px 0 5px}input,textarea,select{font:inherit;width:100%;border:1px solid #c9d9e5;background:#fff;border-radius:10px;padding:11px 12px;color:#1c3547}textarea{min-height:120px;resize:vertical}input:focus,textarea:focus{outline:2px solid #66a9f6;outline-offset:1px}
+button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:11px;font:inherit;font-weight:680;cursor:pointer;margin-top:12px}button.secondary{color:#216dc6;background:#edf4fc}button:disabled{cursor:wait;opacity:.55}
+.row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1;min-width:160px}.split{display:grid;grid-template-columns:1fr 1fr;gap:18px}.hidden{display:none!important}
+.error{color:#b12336}.success{color:#21754e}.caption{font-size:.86rem;color:#687d8c;margin-top:8px}#message{min-height:24px;font-size:.92rem;font-weight:600}small{color:#72808b}
+@media(max-width:700px){.split{grid-template-columns:1fr}.shell{padding:20px 12px}.card{padding:16px}}
+</style></head><body><div class="shell">
+<header><div class="brand">🍲 Recipe <span>Importer</span></div><button id="logout" class="secondary hidden">Disconnect</button></header>
+<div id="message" role="status" aria-live="polite"></div>
+<section id="login" class="card"><h1>Connect to KitchenOwl</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household.</p>
+<form id="login-form"><label for="username">Username</label><input id="username" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Connect</button></form></section>
+<div id="workspace" class="hidden"><section class="card"><div class="row"><div><h2>Import a recipe</h2><p class="muted">Paste a recipe page, Instagram Reel URL, or recipe text. Nothing saves until you approve it.</p></div><div><label for="household">Save to household</label><select id="household"></select></div></div>
+<label for="source">Link or recipe text</label><textarea id="source" placeholder="Paste any recipe URL, Instagram Reel, or ingredients and instructions..."></textarea>
+<div class="row"><div><label for="upload">Or choose an image / video</label><input type="file" id="upload" accept="image/jpeg,image/png,image/webp,video/*"></div><div><label>&nbsp;</label><button id="extract" type="button">Extract &amp; preview</button></div></div></section>
+<section id="preview" class="card hidden"><h2>Review the recipe</h2><p class="muted">Check every ingredient and step. Edit any detail before saving.</p>
+<div class="split"><div><label>Recipe title</label><input id="title" maxlength="300"><label>Description</label><textarea id="description" rows="3"></textarea><label>Ingredients — one per line</label><textarea id="ingredients" rows="8"></textarea></div><div><label>Servings</label><input id="servings"><label>Instructions — one step per line</label><textarea id="instructions" rows="10"></textarea><label>Notes</label><textarea id="notes" rows="3"></textarea></div></div>
+<div class="row"><div><label>Prep minutes</label><input id="prep" type="number" min="0" max="100000"></div><div><label>Cook minutes</label><input id="cook" type="number" min="0" max="100000"></div><div><label>Total minutes</label><input id="total" type="number" min="0" max="100000"></div></div>
+<label>Original source URL</label><input id="url"><p class="caption" id="confidence"></p><button id="save">Add to KitchenOwl</button></section></div></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let token = sessionStorage.getItem('ri_token') || '', current = null, busy = false;
+const fields = ['title','description','ingredients','instructions','servings','notes','prep','cook','total','url'];
+function message(text, kind=''){ $('message').textContent=text; $('message').className=kind; }
+function connected(yes){$('login').classList.toggle('hidden',yes);$('workspace').classList.toggle('hidden',!yes);$('logout').classList.toggle('hidden',!yes);}
+async function api(path,options={}){
+  const r=await fetch(path,{...options,headers:{...(options.headers||{}), Authorization:'Bearer '+token}});
+  const body=await r.json().catch(()=>({})); if(!r.ok)throw Error(body.detail||'Server returned '+r.status); return body;
+}
+function disabled(state){busy=state; for(const id of ['extract','save']) $(id).disabled=state;}
+async function load(){
+ const hs=await api('/api/kitchenowl/households');if(!Array.isArray(hs))throw Error('Invalid household list');
+ const select=$('household');select.replaceChildren();
+ for(const h of hs){const opt=new Option(String(h.name||('Household '+h.id)),String(h.id));select.add(opt);}
+ if(hs.length===0)message('Account has no KitchenOwl households.','error');
+}
+$('login-form').addEventListener('submit',async e=>{e.preventDefault();message('Connecting…');
+ try{const r=await fetch('/api/auth/kitchenowl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});
+ const data=await r.json();if(!r.ok)throw Error(data.detail||'Login failed'); token=data.token; sessionStorage.setItem('ri_token',token);$('password').value='';connected(true);await load();message('Connected to KitchenOwl.','success');}
+ catch(err){message(err.message,'error');}});
+$('logout').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}catch(_){}token='';sessionStorage.removeItem('ri_token');current=null;$('preview').classList.add('hidden');connected(false);message('Disconnected.');});
+function recipeFields(data){current=data;$('title').value=data.title||'';$('description').value=data.description||'';$('servings').value=data.servings||'';
+ $('notes').value=data.notes||'';$('prep').value=data.prep_time??'';$('cook').value=data.cook_time??'';$('total').value=data.total_time??'';$('url').value=data.source_url||'';
+ $('ingredients').value=(data.ingredients||[]).map(i=>[i.quantity,i.unit,i.name].filter(Boolean).join(' ') +(i.note?' ('+i.note+')':'')).join('\n');
+ $('instructions').value=(data.instructions||[]).join('\n');$('confidence').textContent='Confidence: '+(data.confidence||'low')+' — Review: '+(data.fields_needing_review||[]).join(', ');
+ $('preview').classList.remove('hidden');$('preview').scrollIntoView({behavior:'smooth'});
+}
+function lines(s){return s.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);}
+$('extract').addEventListener('click',async()=>{
+ if(busy)return; disabled(true);message('Extracting…');
+ try{
+ const file=$('upload').files[0];let path,options={method:'POST'};
+ if(file){const form=new FormData();form.append('file',file);path=file.type.startsWith('video/')?'/api/parse/video':'/api/parse/image';options.body=form;}
+ else{const input=$('source').value.trim(); if(!input)throw Error('Paste a recipe URL or text, or select a file');
+ const match=input.match(/https?:\/\/[^\s<>"']+/i);const url=match?match[0].replace(/[,.!)]+$/,''):null;
+ const instagram=url&&/^https:\/\/(?:www\.)?instagram\.com\/(reel|p|tv)\//i.test(url);
+ path=instagram?'/api/parse/instagram':url?'/api/parse/url':'/api/parse/text';
+ options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(instagram||url?{url}:{text:input});}
+ recipeFields(await api(path,options));message('Preview ready. Nothing has been saved.','success');
+ }catch(err){message(err.message,'error');}finally{disabled(false);}
+});
+$('save').addEventListener('click',async()=>{if(busy||!current)return;disabled(true);
+ try{const name=$('title').value.trim();if(!name||name.toLowerCase()==='untitled recipe'||name.toLowerCase()==='review this video recipe')throw Error('Enter a descriptive recipe title');
+ const ing=lines($('ingredients').value).map(name=>({name,raw:name}));const steps=lines($('instructions').value);
+ if(!ing.length&&!steps.length)throw Error('Add an ingredient or instruction before saving');
+ const recipe={...current,title:name,description:$('description').value,servings:$('servings').value,notes:$('notes').value,ingredients:ing,instructions:steps,source_url:$('url').value.trim()};
+ for(const [key,id] of [['prep_time','prep'],['cook_time','cook'],['total_time','total']])recipe[key]=$(id).value===''?null:Number($(id).value);
+ const id=Number($('household').value);if(!id)throw Error('Choose a KitchenOwl household');
+ const duplicates=await api('/api/kitchenowl/check-duplicate/'+id+'?title='+encodeURIComponent(name));
+ if(duplicates.has_duplicate&&!window.confirm('A recipe with this name already exists. Add a copy anyway?'))return;
+ if(!window.confirm('Add this reviewed recipe to KitchenOwl?'))return;
+ await api('/api/kitchenowl/recipe/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipe})});
+ current=null;$('preview').classList.add('hidden');$('upload').value='';$('source').value='';message('Recipe successfully saved to KitchenOwl.','success');
+ }catch(err){message(err.message,'error');}finally{disabled(false);}
+});
+if(token){api('/api/auth/status').then(()=>{connected(true);return load()}).catch(()=>{sessionStorage.removeItem('ri_token');token='';connected(false)});}
+</script></body></html>
