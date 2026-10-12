@@ -41,6 +41,7 @@ class Recipe(BaseModel):
     source_type: str | None = None
     evidence: str = Field(default="", max_length=MAX_TEXT)
     requires_manual_review: bool = False
+    extraction: dict[str, str] = Field(default_factory=dict)
 
 
 class ParseRequest(BaseModel):

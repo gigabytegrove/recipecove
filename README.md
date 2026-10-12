@@ -1,4 +1,4 @@
-# Recipe Importer 1.3.0
+# Recipe Importer 1.3.1
 
 **One Docker container. One native Android app. Direct KitchenOwl integration. No KO-Pellet or bridge.**
 
@@ -60,9 +60,9 @@ If you build from source instead, `cd server && docker compose up -d --build` us
 
 To update the KitchenOwl URL or LLT later, sign in as administrator on the web interface and select **Settings**. No container recreation is needed. Configuration, including the LLT and optional OpenAI key, is encrypted in `/data`, with the local encryption key also stored in `/data` (protect backups of this volume and restrict access to Docker host/root). Back up this entire volume; losing its key renders encrypted configuration unreadable. The server never returns stored tokens to browsers in settings/status endpoints. New KitchenOwl settings invalidate previously saved per-user sessions, but the administrator's LLT-based session remains valid.
 
-Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.3.0`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
+Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.3.1`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
 
-A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.3.0`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
+A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.3.1`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
 
 ### Low-memory operation (default)
 
@@ -134,7 +134,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.3.0, intended for testing and verification on your network before migrating all recipe imports.
+Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.3.1, intended for testing and verification on your network before migrating all recipe imports.
 
 ## Recipe URL import and HTTP 403 responses
 
@@ -149,3 +149,7 @@ Pasting a recognized Facebook video, Reel or fb.watch link (including `/page/vid
 When a video can be downloaded, Recipe Importer extracts the post caption, audio transcription using the one-shot CPU Whisper subprocess and sampled on-screen text with Tesseract. The preview includes the extracted source evidence for inspection. Without an OpenAI API key, conversational video transcripts may not convert automatically into structured ingredients and steps; in that case the editor clearly reports manual review and displays the captured text rather than falsely claiming that a recipe was imported.
 
 Some Facebook and Instagram links cannot be downloaded, including login-required, region-blocked and platform-restricted posts. Those fail with an explicit message and an alternative to upload a locally available video or paste its caption. Facebook is especially inconsistent and is not guaranteed to work for every public Reel. No browser automation container is required.
+
+### v1.3.1 speech extraction visibility
+
+The recipe preview reports whether video media was downloaded, whether the Whisper worker recognized spoken words, and whether video-frame OCR found readable text. Failed speech extraction is no longer silently reported as a complete video extraction. Empty VAD results are retried once without VAD, with the same single CPU worker and no persistent AI memory. A caption-only Facebook/Instagram fallback explicitly states that video was not downloaded. Use `docker logs --tail 100 recipe-importer` to inspect non-sensitive worker exit codes if speech extraction fails.

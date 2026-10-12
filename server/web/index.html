@@ -40,7 +40,7 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <div class="split"><div><label>Recipe title</label><input id="title" maxlength="300"><label>Description</label><textarea id="description" rows="3"></textarea><label>Ingredients — one per line</label><textarea id="ingredients" rows="8"></textarea></div><div><label>Servings</label><input id="servings"><label>Instructions — one step per line</label><textarea id="instructions" rows="10"></textarea><label>Notes</label><textarea id="notes" rows="3"></textarea></div></div>
 <div class="row"><div><label>Prep minutes</label><input id="prep" type="number" min="0" max="100000"></div><div><label>Cook minutes</label><input id="cook" type="number" min="0" max="100000"></div><div><label>Total minutes</label><input id="total" type="number" min="0" max="100000"></div></div>
 <label>Original source URL</label><input id="url"><p class="caption" id="confidence"></p>
-<details id="evidence-box" class="hidden"><summary>Extracted caption, spoken words and on-screen text</summary><pre id="evidence-text" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;background:#f2f6fa;border-radius:10px;padding:12px"></pre></details><button id="save">Add to KitchenOwl</button></section></div></div>
+<div id="extraction-status" class="caption hidden" role="status" style="padding:10px 12px;background:#edf4fc;border-radius:10px;margin:12px 0;white-space:pre-wrap"></div><details id="evidence-box" class="hidden"><summary>Extracted caption, spoken words and on-screen text</summary><pre id="evidence-text" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;background:#f2f6fa;border-radius:10px;padding:12px"></pre></details><button id="save">Add to KitchenOwl</button></section></div></div>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -68,7 +68,12 @@ function recipeFields(data){current=data;$('title').value=data.title||'';$('desc
  $('notes').value=data.notes||'';$('prep').value=data.prep_time??'';$('cook').value=data.cook_time??'';$('total').value=data.total_time??'';$('url').value=data.source_url||'';
  $('ingredients').value=(data.ingredients||[]).map(i=>[i.quantity,i.unit,i.name].filter(Boolean).join(' ') +(i.note?' ('+i.note+')':'')).join('\n');
  $('instructions').value=(data.instructions||[]).join('\n');$('confidence').textContent='Confidence: '+(data.confidence||'low')+' — Review: '+(data.fields_needing_review||[]).join(', ');
+ const state=data.extraction||{};
+ const details=[['Video',state.video],['Caption',state.caption],['Speech',state.speech],['On-screen text',state.onscreen]].filter(([_,value])=>Boolean(value));
+ $('extraction-status').textContent=details.map(([name,value])=>name+': '+value).join('\n');
+ $('extraction-status').classList.toggle('hidden',details.length===0);
  $('evidence-box').classList.toggle('hidden',!data.evidence);$('evidence-text').textContent=data.evidence||'';
+ if(data.evidence&&details.length>0){$('evidence-box').open=true;}
  $('preview').classList.remove('hidden');$('preview').scrollIntoView({behavior:'smooth'});
 }
 function lines(s){return s.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);}
@@ -83,6 +88,7 @@ $('extract').addEventListener('click',async()=>{
  options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(url?{url}:{text:input});}
  const parsed=await api(path,options);recipeFields(parsed);
  if(parsed.requires_manual_review){$('evidence-box').open=true;message('Source read, but ingredients and steps could not be identified automatically. Read the extracted source text below and enter missing details. Nothing has been saved.','error');}
+ else if(parsed.extraction&&parsed.extraction.video&&parsed.extraction.speech!=='Transcribed spoken words')message('Recipe extracted, but spoken audio was not transcribed. See extraction status and review the recipe carefully.','error');
  else message('Recipe extracted. Review before saving. Nothing has been saved.','success');
  }catch(err){message(err.message,'error');}finally{disabled(false);}
 });

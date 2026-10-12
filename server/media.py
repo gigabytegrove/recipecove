@@ -16,7 +16,7 @@ from fastapi import HTTPException, UploadFile
 
 
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 MAX_UPLOAD = 80 * 1024 * 1024
 MAX_SECONDS = 900
 MAX_EXTRACT_CHARS = 47000
@@ -142,7 +142,7 @@ def transcribe_audio(path: Path) -> str:
         except (subprocess.TimeoutExpired, OSError) as exc:
             raise RuntimeError("Could not prepare video audio") from exc
         if result.returncode != 0 or not audio.exists() or audio.stat().st_size < 1024:
-            return ""
+            raise RuntimeError("No readable audio track was found in the downloaded video")
         try:
             transcription = subprocess.run([
                 sys.executable, str(Path(__file__).with_name("transcribe_worker.py")), str(audio)
@@ -152,8 +152,11 @@ def transcribe_audio(path: Path) -> str:
         except OSError as exc:
             raise RuntimeError("Could not start speech recognition") from exc
         if transcription.returncode != 0:
-            LOG.warning("Whisper worker exited with status %d", transcription.returncode)
-            raise RuntimeError("Speech recognition worker failed; check memory limit and Whisper model")
+            # Never echo worker stderr: third-party libraries may output URLs.
+            LOG.warning("Whisper worker failed with exit status %d", transcription.returncode)
+            if transcription.returncode in (137, -9):
+                raise RuntimeError("Whisper was killed (likely memory limit)")
+            raise RuntimeError("Whisper worker failed (exit status %d; check model download and Docker logs)" % transcription.returncode)
         return transcription.stdout.strip()[:MAX_EXTRACT_CHARS]
 
 
@@ -183,22 +186,31 @@ def ocr_video(path: Path, workdir: Path) -> str:
 def process_video(path: Path, workdir: Path, caption: str = "", source_url: str = "") -> dict:
     seconds = duration_of(path)
     limitations: list[str] = []
+    speech_status = "No spoken words recognized"
+    ocr_status = "No on-screen text recognized"
     try:
         speech = transcribe_audio(path)
+        if speech:
+            speech_status = "Transcribed spoken words"
     except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+        # The post caption is not evidence that video speech was processed.
         LOG.warning("Speech extraction unavailable: %s", exc)
         speech = ""
-        limitations.append("Speech recognition failed; check Whisper model/network access")
+        speech_status = str(exc)[:220]
+        limitations.append("Speech: " + speech_status)
     try:
         visible = ocr_video(path, workdir)
+        if visible:
+            ocr_status = "Read on-screen text"
     except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
         LOG.warning("Video OCR unavailable: %s", exc)
         visible = ""
-        limitations.append("On-screen text recognition failed")
+        ocr_status = "On-screen text recognition failed"
+        limitations.append(ocr_status)
     caption = caption.strip()[:20000]
     if not (caption or speech or visible):
-        raise ValueError("No readable caption, speech or on-screen text was found; share a screenshot or paste recipe text instead")
-    # Explicit section labels help the recipe parser distinguish sources.
+        raise ValueError("The video was downloaded but no caption, recognized speech, or on-screen text was available. "
+                         "Check the server logs; you can also share a screenshot or paste recipe text.")
     chunks = []
     if caption:
         chunks.append("POST CAPTION / DESCRIPTION:\n" + caption)
@@ -206,15 +218,23 @@ def process_video(path: Path, workdir: Path, caption: str = "", source_url: str 
         chunks.append("SPOKEN WORDS FROM VIDEO:\n" + speech)
     if visible:
         chunks.append("TEXT VISIBLE IN VIDEO FRAMES:\n" + visible)
-    # Put the likely title first: the built-in no-AI parser uses line one as
-    # the recipe title, while configured AI sees all labeled evidence below.
     first_caption_line = next((line.strip() for line in caption.splitlines() if line.strip()), "")
     suggested_title = (first_caption_line or "Review this video recipe")[:140]
     combined = (suggested_title + "\n\n" + "\n\n".join(chunks))[:MAX_EXTRACT_CHARS]
+    if not speech:
+        limitations.append("No speech transcript was produced from this video")
+    LOG.info("Video extraction completed: duration=%.1fs caption=%s speech=%s ocr=%s",
+             seconds, bool(caption), bool(speech), bool(visible))
     return {
         "text": combined, "source_url": source_url,
         "has_caption": bool(caption), "has_speech": bool(speech), "has_visible_text": bool(visible),
         "duration_seconds": round(seconds, 1),
+        "extraction": {
+            "video": "Downloaded and processed",
+            "caption": "Caption available" if caption else "No caption",
+            "speech": speech_status,
+            "onscreen": ocr_status,
+        },
         "warning": "Video extraction is imperfect. Review quantities, ingredients and steps before saving." + (" " + "; ".join(limitations) if limitations else "")
     }
 
@@ -261,9 +281,13 @@ def extract_social_video(url: str, platform: str) -> dict:
             # Some Instagram photo posts have usable recipe captions but no video.
             # We can return a caption-only source, but NEVER pretend to have processed video.
             if len(desc.strip()) >= 80:
+                LOG.warning("%s video download unavailable; using caption only", platform)
                 return {"text": desc.strip()[:MAX_EXTRACT_CHARS], "source_url": clean_url,
                         "has_caption": True, "has_speech": False, "has_visible_text": False,
-                        "warning": "Only the post caption was accessible; no video was processed. Review all recipe fields."}
+                        "extraction": {"video": "Not downloaded (platform refused or download failed)",
+                                       "caption": "Caption available", "speech": "Not attempted — no video",
+                                       "onscreen": "Not attempted — no video"},
+                        "warning": "Only the post caption was accessible; NO video audio or frames were processed. Review all recipe fields."}
             raise ValueError(
                 f"{platform.title()} video could not be downloaded. If this link works in your "
                 "browser but not the importer, upload the video file or paste its caption."

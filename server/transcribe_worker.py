@@ -22,10 +22,14 @@ def main() -> int:
         num_workers=1,
         download_root="/models",
     )
-    segments, _ = model.transcribe(
-        sys.argv[1], vad_filter=True, beam_size=3,
-    )
-    print(" ".join(segment.text.strip() for segment in segments if segment.text.strip())[:47000])
+    # VAD can incorrectly reject quiet narration, especially in cooking Reels.
+    # Retry only empty results without VAD, using the already loaded model.
+    segments, _ = model.transcribe(sys.argv[1], vad_filter=True, beam_size=3)
+    words = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+    if not words.strip():
+        segments, _ = model.transcribe(sys.argv[1], vad_filter=False, beam_size=3)
+        words = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+    print(words[:47000])
     return 0
 
 

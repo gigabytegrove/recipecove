@@ -48,7 +48,7 @@ def test_failed_worker_reports_failure_without_retaining_model():
                 media.transcribe_audio(video)
                 assert False, "Expected failure"
             except RuntimeError as exc:
-                assert "worker failed" in str(exc)
+                assert "memory limit" in str(exc)
         assert not hasattr(media, "_whisper_model")
 
 

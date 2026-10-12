@@ -19,7 +19,7 @@ import media
 import recipes
 import settings_store
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -257,6 +257,10 @@ async def _complete_media(info: dict, source_type: str) -> recipes.Recipe:
     result = await recipes.parse_text(info["text"], source_url=info.get("source_url", ""), source_type=source_type)
     warning = info.get("warning", "")
     result.evidence = info["text"][:recipes.MAX_TEXT]
+    result.extraction = info.get("extraction", {})
+    if result.extraction.get("speech") not in (None, "Transcribed spoken words"):
+        detail = "Video speech: " + result.extraction["speech"]
+        result.notes = (result.notes + "\n\n" if result.notes else "") + detail
     if not (result.ingredients or result.instructions):
         result.requires_manual_review = True
         result.confidence = "low"
