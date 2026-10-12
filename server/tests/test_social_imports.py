@@ -161,7 +161,7 @@ def test_facebook_yt_dlp_alternate_watch_url_when_page_metadata_blocked():
 
 
 def test_bundled_web_interface_shows_source_evidence_and_facebook_support(client):
-    html=client.get('/').text
+    html=client.get('/legacy').text
     assert 'Facebook video' in html
     assert 'id="evidence-box"' in html
     assert 'parsed.requires_manual_review' in html

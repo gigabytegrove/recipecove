@@ -31,10 +31,10 @@ def client():
 
 def test_health_and_web(client):
     r = client.get('/health')
-    assert r.json()['version'] == '2.0.1'
+    assert r.json()['version'] == '2.0.2'
     web = client.get('/')
     assert web.status_code == 200
-    assert 'Recipe Importer' in web.text
+    assert 'Forknook' in web.text
     assert 'KO-Pellet' not in web.text
     assert 'frame-ancestors' in web.headers['content-security-policy']
 

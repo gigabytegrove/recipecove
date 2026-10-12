@@ -1,38 +1,23 @@
-# Forknook — Family Recipe Management System (v2.0.1 testing release)
+# Forknook — family recipe management system
 
-Forknook is a **standalone**, self-hosted family recipe manager. No KitchenOwl server, account or API token is needed to operate Forknook. This project expands the former Recipe Importer, and retains the existing image/video/website recipe extraction implementation and server updater for compatibility.
+Forknook is a standalone, self-hosted recipe manager published by **Gigabyte Grove**. It is designed for a household to collect and edit recipes, plan meals, keep personal *Want to Make* and *Made Before* statuses, and turn chosen recipes into shopping lists. **A KitchenOwl account is not required.** Its former Recipe Importer engine is still available for importing from recipe websites, Facebook/Instagram videos when accessible, image/video uploads, and pasted text. All imported recipes are previewed and edited before saving.
 
-![Forknook branding](server/web/forknook-logo.png)
+**Current server build:** 2.0.2. **Android client:** build from `android/` locally on Windows. The code is intended for on-network testing and review before replacing your existing recipe system; end-to-end behavior with arbitrary social-media links remains dependent on the social platforms.
 
-## Built in this release
+## Single-container deployment
 
-| Area | Features |
-| --- | --- |
-| Security and administration | One-time first-run claim, own SQLite users, individual passwords (PBKDF2), 30-day hashed bearer sessions, admin/member roles, admin user management, last-admin safeguard, login throttling, disabled-user session revocation |
-| Recipes | Shared family collection, create/view/edit, search, tags, categories/colors, source attribution, personal **Made Before** and **Want to Make** flags, per-user made count |
-| Imports | Public recipe websites (structured markup), Facebook/Instagram videos where accessible, paste, screenshots via OCR, uploaded video with local Whisper and OCR, RSS/Atom feed subscriptions and manual import. **Every import has a preview/edit step before saving**. Platform restrictions and speech parsing limitations remain; do not treat incomplete extraction as accurate. |
-| Shopping | Shared lists, custom items, check off, remove; create shopping list directly from a selection of recipes. Raw ingredient wording and quantities are preserved instead of guessing units or conversions. |
-| Meal planning | Calendar-style weekly touch view, breakfast/lunch/dinner/snack meal scheduling, portions, removal. |
-| iOS and browser | Responsive, touch-sized web UI/PWA under `/app/` with Safari Add to Home Screen support. iPad requires HTTPS for service-worker caching. Private API responses are **never** cached by the service worker. |
-| Android | Native installable APK using the same self-hosted web interface in a protected WebView, with Android share-sheet support for recipe links, images and videos. Local Windows Gradle-wrapper APK build. KitchenOwl username/password are no longer required. |
-| AI recipe structuring | Optional OpenAI API key configured in Forknook Administration; stored encrypted in `/data`, never sent to mobile devices. Video transcription/OCR remains local. |
-| Updates | Server's original GitHub-release/checksum/restart/rollback mechanism is retained, retargeted to `gigabytegrove/forknook`. Image and dependency changes still require a Docker image redeploy. |
-| Migration | Admin JSON import with **dry run first**, no overwrites/deletes, duplicate-name skips and migration audit counts. Admin can export Forknook data as JSON. |
-
-## Safe test deployment — without touching Recipe Importer
-
-Publish and run **`ghcr.io/gigabytegrove/forknook:2.0.1`** in a separate Dokploy Compose app, without overwriting the original Recipe Importer container. Use port `8999` internally and a unique host port or proxy hostname. The new installation gets **its own** `/data` volume and therefore does not alter existing Recipe Importer configuration or existing KitchenOwl content.
+The published image is `ghcr.io/gigabytegrove/forknook:latest`. The image uses port **8999**, 1 CPU and a 1536 MiB memory limit, with `/data` for persistent SQLite/user settings and `/models` for cached Whisper speech models. The Dockerfile and `server/compose.yaml` define the image build/development counterpart. For Dokploy, create one Compose service with that image and persistent volume mounts:
 
 ```yaml
 services:
   forknook:
-    image: ghcr.io/gigabytegrove/forknook:2.0.1
+    image: ghcr.io/gigabytegrove/forknook:latest
     container_name: forknook
     restart: unless-stopped
     ports:
-      - "9000:8999"
+      - "8999:8999"
     environment:
-      WHISPER_MODEL: "base"
+      WHISPER_MODEL: base
       OMP_NUM_THREADS: "1"
       OMP_THREAD_LIMIT: "1"
       OPENBLAS_NUM_THREADS: "1"
@@ -40,11 +25,6 @@ services:
     cpus: 1.0
     mem_limit: 1536m
     memswap_limit: 1536m
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop: [ALL]
-    pids_limit: 64
     volumes:
       - forknook-data:/data
       - forknook-models:/models
@@ -55,47 +35,56 @@ volumes:
   forknook-temp:
 ```
 
-Open `http://YOUR-DOCKER-HOST:9000/app/` on the LAN (or an HTTPS URL through your reverse proxy). Find the **Forknook first-run setup code** in `docker logs forknook`, then create an administrator account. Create additional accounts from Administration. Every account logs in directly to Forknook.
+**Migrating an existing Recipe Importer container:** do not replace or remove your existing `/data` volume without first backing it up. The new Forknook data store uses `/data/forknook.sqlite3` and does not delete KitchenOwl data. Keep the old Recipe Importer container running independently until migration is tested. A fresh Forknook container needs its own persistent volumes unless you explicitly mount an existing data volume.
 
-**Important:** The legacy Recipe Importer endpoints remain accessible for migration and compatibility. The old UI is at `/legacy`, but Forknook does not require its KitchenOwl setup.
+## First-run setup and sign-in
 
-## PWA on iPad
+Open `/app/` or `/`. On a fresh installation, obtain the **Forknook** first-run setup code from `docker logs forknook` (the log may also contain an unrelated legacy Recipe Importer setup code). Create the first Forknook administrator with a display name, username, and password. Other family members get their own native Forknook account credentials; add them from **Administration → Family accounts**. All accounts connect to the Forknook server, not to KitchenOwl. Sessions are scoped to the persistent SQLite database, and administrators can disable members and change credentials.
 
-Use an HTTPS reverse-proxied Forknook domain in Safari. Open `/app/`, sign in, then choose Share → Add to Home Screen. The UI is designed for touch and supports recipes, shopping lists, scheduling, importing, categories and administration. PWA offline caching covers **only the static shell**, not personal data, recipes or private API results. Network connectivity is required for recipe management.
+## Main screens and direct links
 
-## Native Android app: build locally like Calden
+The web app supports real browser URLs: `/app/` (dashboard), `/app/recipes` and `/app/recipes/{id}`, `/app/plan`, `/app/shopping` and `/app/shopping/{id}`, `/app/sources` and `/app/sources/{feed_id}`, `/app/categories`, `/app/admin`, `/app/admin/users`, `/app/admin/backups`, `/app/admin/updates`, and `/app/admin/ai`. Refresh and browser navigation preserve the selected page. The Forknook logo returns to `/app/`.
 
-Clone `https://github.com/gigabytegrove/forknook` once to your Windows user folder. On later builds, update the same checkout with `git pull --ff-only origin main`. Use the existing Android SDK/JDK from Calden, then:
+Features include:
+
+- Native recipe and ingredient/instruction storage in SQLite, categories and tags, full create/edit, status tracking (*Made Before*/*Want to Make*), and recipe search.
+- A weekly breakfast/lunch/dinner/snack meal planner linked to saved recipes.
+- Editable shopping lists, checked-off items, manual items, and shopping lists generated from selected recipes.
+- Recipe URL/RSS/Atom feed subscriptions, browsing feed entries, and preview-first importing.
+- Multi-user family accounts with admin/member permissions, native login sessions, and administrative data export.
+- Copy-only KitchenOwl JSON migration with dry-run preview and duplicate prevention. KitchenOwl is never deleted or modified by this process. Export a backup before migrating.
+- An optional OpenAI text parser for difficult spoken recipes; local Tesseract OCR and the disposable Whisper process remain available without a paid API. Video extraction is best-effort, and source descriptions cannot guarantee video speech/OCR was accessible.
+
+## iPad PWA and Android
+
+The touch-friendly PWA is available under `/app/`. On iPad, open it in Safari and choose **Share → Add to Home Screen**. Static assets are versioned, update using a network-first strategy, and the manifest provides home-screen icons. iPad remote access should use HTTPS for proper PWA/service-worker support.
+
+The Android app opens the same Forknook UI from your own server and accepts links/photos/videos shared from other apps. It requires Forknook credentials—not KitchenOwl credentials. Build the APK locally from the repository on Windows with:
 
 ```powershell
-cd "$HOME\forknook"
-git pull --ff-only origin main
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\android\build-apk.ps1"
+Set-Location "$HOME\forknook\android"
+.\build-apk.ps1
 ```
 
-Expected APK: `android\app\build\outputs\versioned\Forknook-v2.0.0-debug.apk`. The Windows build uses the committed Gradle wrapper, runs unit tests, copies the debug build into this versioned folder, checks Android package/version and signature, and writes SHA256SUMS.txt; it no longer produces the legacy recipe-importer filename. The script builds/tests, validates the package/signature, and writes `SHA256SUMS.txt`. This is sideloadable debug-signed software, not a Play Store-signed release. The user selects the Forknook server URL on first launch; Android shares from websites and media open in the Forknook interface.
+The build uses the checked-in Gradle wrapper, your installed Android SDK/JDK, and saves a versioned APK to `android/app/build/outputs/versioned/`. On a first clone, use `git clone https://github.com/gigabytegrove/forknook.git "$HOME\forknook"`; for later builds, use `git pull --ff-only origin main` from that checkout. Android version and server version are independent.
 
-## KitchenOwl migration — copy first, verify, then decide
+## Administration and native updates
 
-**Do not remove KitchenOwl until you have independently verified your data.** Forknook's importer currently accepts JSON files containing a list of recipe objects, or objects with a `recipes` array. Some KitchenOwl exports have different shapes; check yours before importing. The importer deliberately will not claim complete migration of every household, linked image, shopping list, planner entry, or user account.
+Open **Administration → Application updates** at `/app/admin/updates`. It checks GitHub Releases for compatible server/UI packages, verifies checksums, shows installation progress, and retains previous release metadata for rollback. System-package, dependency, and launcher changes still require a Docker image redeploy. The administration menu also contains family accounts, data export/migration, and optional AI settings.
 
-1. Make a normal backup of your existing KitchenOwl installation (including its database/media) and Forknook `/data` volume.
-2. Export/copy recipe JSON without changing KitchenOwl.
-3. In Forknook Administration → Migration & backups, select JSON and choose **Preview migration**. Review the number of valid entries.
-4. Choose Import only after confirming the preview. Existing Forknook recipe titles are not overwritten; reimporting skips duplicate titles.
-5. Compare recipe counts, ingredients, directions and sample photos against KitchenOwl. Import of photographs/attachments and non-recipe records remains to be validated separately.
-6. Keep KitchenOwl online until household records, planning and shopping workflows have passed acceptance testing.
+### Manual Docker image update if the UI updater is missing
 
-`GET /api/v2/admin/export` provides authenticated JSON export for recoverability. Use a full backup of the Docker volume for the complete SQLite database and hashed accounts; JSON export excludes account passwords and sessions.
+Run `sudo bash scripts/update-existing-forknook.sh` **on the Docker host** from a checkout of this repository, or paste the equivalent command block supplied alongside the update. The script detects exactly one running `ghcr.io/gigabytegrove/forknook` Compose container, validates the `:latest` image in Compose, pulls and recreates only that service, preserves volumes and `/data`, and checks `/health` for version 2.0.2. If health fails, it attempts to return to the previously-running image. If Compose metadata is missing or the image reference differs, it refuses rather than changing your deployment unexpectedly. Back up the `/data` volume before upgrading, and **never** run `docker compose down -v` on a live installation.
 
-## Administration and API
+The existing KitchenOwl-based Recipe Importer screen remains at `/legacy`, and its API routes remain available for compatibility. Forknook's native features use `/api/v2/` and do not contact KitchenOwl.
 
-`/api/v2` is Forknook's separate native API. All private routes require a Forknook `Bearer` session. Sensitive endpoints (user administration, database export and migration, updater) require an admin role. The API doesn't use KitchenOwl tokens. A one-time setup code prevents first-visitor account hijacking. Backups should protect the private `/data` mount. Use HTTPS outside the trusted LAN.
+## Development and checks
 
-The preserved legacy `/api/parse` and `/api/kitchenowl` routes are retained for migration compatibility; `/api/v2/imports/preview-*` is the supported non-destructive import preview API for new clients.
+```bash
+python -m pip install -r server/requirements.txt pytest
+python -m pytest -q server/tests
+node --check server/web/forknook.js
+bash -n scripts/update-existing-forknook.sh
+```
 
-## Verification and known limits
-
-Run `cd server && python -m pytest -q tests`, `node --check server/web/forknook.js`, and the GitHub Actions Android build. This release is an **integration test candidate**, not yet production-certified against your actual Family KitchenOwl export, iOS version, Android device or internet video sources. Known limitations: automatic background feed polling is not implemented (manual browse/import), automatic consolidation/servings scaling of identical shopping items is not implemented, video providers can reject retrieval, and native iOS offline recipe editing/synchronization is not implemented.
-
-The software uses one Docker container, one CPU limit, 1536 MiB maximum memory, SQLite on disk, and no separate model daemon. Whisper is loaded per request and released after transcription. Backup and capacity validation are required before relying on Forknook as the only copy of your recipes.
+This test suite covers backend permissions, persistence, recipe CRUD, meal planning, shopping lists, migrations, and PWA route responses. It does not prove every function on a physical iPad, Android device, or against every recipe feed/social platform. Preserve a backup and test on a non-production environment before replacing KitchenOwl for your family.

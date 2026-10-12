@@ -171,3 +171,35 @@ def test_database_connections_commit_and_close(client):
         connection.execute('BEGIN IMMEDIATE')
         assert connection.execute('SELECT COUNT(*) FROM recipes').fetchone()[0]==1
         connection.commit()
+
+
+def test_bookmarkable_pwa_routes_and_static_assets(client):
+    c,headers=client
+    for path in ('/app/', '/app/recipes', '/app/recipes/1', '/app/plan',
+                 '/app/shopping', '/app/shopping/15', '/app/sources', '/app/sources/15',
+                 '/app/categories', '/app/admin', '/app/admin/users',
+                 '/app/admin/backups', '/app/admin/updates', '/app/admin/ai'):
+        resp=c.get(path)
+        assert resp.status_code==200,(path,resp.text)
+        assert 'Forknook' in resp.text
+        assert resp.headers['cache-control']=='no-store'
+    for path in ('/app/../../etc/passwd','/app/unknown','/app/admin/failure',
+                 '/app/recipes/garbage','/app/shopping/wrong'):
+        assert c.get(path).status_code==404,path
+    for file in ('forknook.css','forknook.js','sw.js'):
+        assert c.get('/app/'+file).status_code==200
+        assert c.get('/app/'+file).headers['cache-control']!='public, max-age=300'
+
+
+def test_dom_regressions_for_setup_admin_navigation_spacing(client):
+    c,_=client
+    html=c.get('/app/').text
+    css=c.get('/app/forknook.css').text
+    js=c.get('/app/forknook.js').text
+    assert '[hidden]' in css and 'display:none!important' in css
+    assert 'id="brand-home"' in html and 'href="/app/"' in html
+    assert 'pagePaths=' in js and "'/app/admin/updates'" in js
+    assert "role.append(node('option'" in js
+    assert "role.add(node('option',{value:'member'" not in js
+    assert 'renderHome()' in js
+    assert '.card{padding:clamp(' in css
