@@ -12,7 +12,7 @@ Forknook is a standalone, self-hosted family recipe manager published by Gigabyt
 - Recipes may be imported from structured recipe websites, Facebook and Instagram public videos/reels, feed entries, text, screenshots and uploaded video. Where media is available, local FFmpeg/Whisper/Tesseract extracts caption, speech and on-screen text. Some login-restricted social media cannot be downloaded. Without an optional AI parser, conversational transcripts may require editing. Review the preview before saving.
 - Native photo upload and **automatic recipe photo capture**. Public image URLs are fetched when a recipe is saved, normalized with Pillow and stored in the persistent `/data/recipe-images` folder. Missing/rejected photos do not prevent saving; users may upload a photo manually. Photos from recipe sites, available social thumbnails and accessible KitchenOwl recipe image URLs are supported. Recipe photos are session-protected.
 - Meal planning, recipe-derived shopping lists, check-off and additional manual shopping items, feeds, and an Administration section for migration and app updates.
-- An installable PWA for iPad/iOS Safari with touch-friendly screens and directly bookmarkable routes. Android builds remain local in `android/`, using the committed Gradle wrapper and `android/build-apk.ps1` as in Calden.
+- An installable PWA for iPad/iOS Safari with touch-friendly screens and directly bookmarkable routes. Android uses a separate native Kotlin/Compose client, built locally in `android/` with the committed Gradle wrapper and `android/build-apk.ps1` as in Calden.
 - Built-in platform-agnostic server/PWA updater for checksum-verified compatible GitHub Releases (single container, no Docker socket, deployment integration or additional service).
 - Versioned `/api/v2` API with documented OpenAPI contract (`/api/v2/openapi.json`). Administrators can issue revocable, read-only API keys in `/app/admin/api`. API-key holders may read **only** explicitly published recipes and images for future external integrations; family-only recipes, notes, submissions and account data are not exposed.
 
@@ -96,16 +96,25 @@ X-Forknook-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Android local build on Windows
+## Native Kotlin Android client (2.2.0-alpha)
 
-In PowerShell (from the existing checkout):
+Forknook's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses Forknook's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved Forknook launcher branding.
+
+Implemented alpha screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored Forknook server URL when possible, but users must sign in again with their Forknook account because a WebView session is not interchangeable with a native API token. Full native administration, polishing, accessibility testing, background behavior, and real-device testing are still pending, so this build is an **alpha**, not a production-final client.
+
+To build on the same Windows PC as Calden, open PowerShell:
 
 ```powershell
-cd "$HOME\forknook\android"
-.\build-apk.ps1
+$repo = Join-Path $HOME 'forknook'
+if (-not (Test-Path "$repo\.git")) { git clone https://github.com/gigabytegrove/forknook.git $repo }
+Set-Location $repo
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'android\build-apk.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
 ```
 
-If the checkout does not exist, clone `https://github.com/gigabytegrove/forknook.git` first. The debug APK is produced in `android/app/build/outputs/versioned/` and is for sideload testing. It points to the Forknook server, never directly to KitchenOwl. Check the native Android package/version and build output separately from the server's version number.
+The local debug APK is `android/app/build/outputs/versioned/Forknook-v2.2.0-alpha-debug.apk`, with an accompanying SHA-256 checksum. Android builds are independent from the server's 2.1.6 version. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
 
 ## Tests and limitations
 
