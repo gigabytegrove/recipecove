@@ -1,5 +1,6 @@
 """Secure Forknook updates: raw releases, image deployment and error diagnostics."""
 import json
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -56,8 +57,7 @@ def test_dokploy_requires_safe_origin():
     assert deploy._origin('http://192.168.1.14:3000')=='http://192.168.1.14:3000'
 
 
-@pytest.mark.asyncio
-async def test_dokploy_detects_cached_image_redeploy(tmp_path,monkeypatch):
+def test_dokploy_detects_cached_image_redeploy(tmp_path,monkeypatch):
     monkeypatch.setattr(deploy,'DATA',tmp_path)
     monkeypatch.setattr(deploy,'CONFIG',tmp_path/'dokploy.json')
     deploy.configure('https://dokploy.example.org','forknook-123','safe-access-token-1234')
@@ -74,8 +74,8 @@ async def test_dokploy_detects_cached_image_redeploy(tmp_path,monkeypatch):
     def factory(*args,**kwargs):
         return original(*args,transport=httpx.MockTransport(respond),**kwargs)
     with patch.object(deploy.httpx,'AsyncClient',side_effect=factory):
-        assert (await deploy.verify())['ready'] is True
-        assert (await deploy.deploy('2.1.3'))['started'] is True
+        assert asyncio.run(deploy.verify())['ready'] is True
+        assert asyncio.run(deploy.deploy('2.1.3'))['started'] is True
     assert seen[-1][1]=='/api/compose.deploy'
     assert json.loads(seen[-1][3])['freshVolumes'] is False
     assert all(x[2]=='safe-access-token-1234' for x in seen)
@@ -83,7 +83,7 @@ async def test_dokploy_detects_cached_image_redeploy(tmp_path,monkeypatch):
     with patch.object(deploy.httpx,'AsyncClient',side_effect=lambda *a,**k: original(*a,transport=httpx.MockTransport(
       lambda request:httpx.Response(200,json={'composeFile':'services:\n  forknook:\n    image: ghcr.io/gigabytegrove/forknook:latest'})),**k)):
         with pytest.raises(HTTPException,match='pull_policy'):
-            await deploy.verify()
+            asyncio.run(deploy.verify())
 
 
 def test_update_check_degrades_gracefully_when_release_fails(tmp_path,monkeypatch):
