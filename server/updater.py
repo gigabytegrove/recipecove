@@ -25,7 +25,6 @@ from fastapi import HTTPException
 DATA = Path(os.environ.get('DATA_DIR', '/data')) / 'updates'
 BASE = Path('/app')
 REPO = 'gigabytegrove/forknook'
-IMAGE_METADATA = f'https://raw.githubusercontent.com/{REPO}/main/server/update_release.json'
 API = f'https://api.github.com/repos/{REPO}/releases/latest'
 ACTIVE = DATA / 'active.json'
 STATUS = DATA / 'status.json'
@@ -100,74 +99,40 @@ def _release() -> dict:
 
 
 def check() -> dict:
-    """Separate installable code packages from published Docker image versions.
+    """Check the latest checksum-verified application release.
 
-    A failed GitHub Release request must not generate an unexplained HTTP 500.
-    An image update is offered only when a versioned registry manifest exists.
+    Forknook has no dependency on any container runtime API or external
+    deployment platform. Only Python/UI changes compatible with the existing
+    image can be applied by an unprivileged in-container process.
     """
     local = installed()
-    current = local.get('version', _IMAGE_VERSION)
-    result = {'current_version': current,
-              'image_version': _IMAGE_VERSION,
-              'latest_version': None,
-              'available': False,
-              'image_available': False,
-              'latest_image_version': None,
-              'code_error': None,
-              'note': 'Verified Python/UI releases update inside Forknook. Image updates use the optional Dokploy connection.'}
+    result = {
+        'current_version': local.get('version', _IMAGE_VERSION),
+        'image_version': _IMAGE_VERSION,
+        'latest_version': None,
+        'available': False,
+        'requires_image': False,
+        'release_url': None,
+        'code_error': None,
+        'note': 'Updates install inside Forknook using a verified release, a supervised restart, and automatic rollback.',
+    }
     try:
         release = _release()
         result['latest_version'] = release['version']
         result['release_url'] = release['url']
-        # Only source-compatible releases can use the code update path.
         manifest = json.loads(_https_get(
-            f'https://raw.githubusercontent.com/{REPO}/v{release["version"]}/server/update_release.json', 5000))
-        requires_image = bool(manifest.get('requires_image'))
-        result['requires_image'] = requires_image
-        result['available'] = (not requires_image and _semver(release['version']) > _semver(current))
-    except Exception as exc:
-        # The Docker update path can remain usable when GitHub Releases fails.
-        result['code_error'] = f'Could not read published code updates: {type(exc).__name__}'
-
-    try:
-        metadata = json.loads(_https_get(IMAGE_METADATA,5000))
-        candidate = metadata['version']
-        if _semver(candidate) > _semver(_IMAGE_VERSION):
-            if _published_image(candidate):
-                result['latest_image_version'] = candidate
-                result['image_available'] = True
-            elif result['latest_version'] and _semver(result['latest_version']) > _semver(_IMAGE_VERSION):
-                # Registry may temporarily reject anonymous manifest access.
-                # Never offer an unverified main-branch tag as published; use
-                # an existing GitHub Release as a conservative fallback.
-                result['latest_image_version'] = result['latest_version']
-                result['image_available'] = True
-        else:
-            result['latest_image_version'] = _IMAGE_VERSION
-    except Exception:
-        # If the newest-image endpoint cannot be contacted, use the stable
-        # release's version as a limited fallback, never an arbitrary tag.
-        if result['latest_version']:
-            result['latest_image_version'] = result['latest_version']
-            result['image_available'] = _semver(result['latest_version']) > _semver(_IMAGE_VERSION)
+            f'https://raw.githubusercontent.com/{REPO}/v{release["version"]}/server/update_release.json',
+            5000))
+        if manifest.get('version') != release['version']:
+            raise ValueError('Release metadata version mismatch')
+        result['requires_image'] = bool(manifest.get('requires_image'))
+        result['available'] = (
+            not result['requires_image'] and
+            _semver(release['version']) > _semver(result['current_version'])
+        )
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        result['code_error'] = 'Could not check the published release: ' + type(exc).__name__
     return result
-
-
-def _published_image(version: str) -> bool:
-    """Verify the OCI manifest exists before offering a Docker image update."""
-    from urllib.parse import urlencode
-    token_uri='https://ghcr.io/token?' + urlencode({
-        'scope':f'repository:{REPO}:pull','service':'ghcr.io'})
-    try:
-        token=json.loads(_https_get(token_uri,30_000))['token']
-        url=f'https://ghcr.io/v2/{REPO}/manifests/{version}'
-        req=urllib.request.Request(url,headers={
-            'Authorization':'Bearer '+token,
-            'Accept':'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json'})
-        with urllib.request.urlopen(req,timeout=15) as resp:
-            return resp.status==200
-    except (OSError, ValueError, KeyError, urllib.error.HTTPError):
-        return False
 
 
 def _verified_files(release: dict) -> dict[str, bytes]:
@@ -218,19 +183,19 @@ def _verified_files(release: dict) -> dict[str, bytes]:
     if metadata.get('version') != release['version']:
         raise ValueError('Release version does not match update contents')
     if metadata.get('requires_image'):
-        raise ValueError('This update requires a Docker image. Configure Dokploy on the Updates page.')
+        raise ValueError('This update changes the container runtime and cannot be applied by Forknook's unprivileged updater.')
     # Python dependencies are installed in the image and cannot be changed
     # from the unprivileged updater. The stable launcher isn't executed from
     # the overlay; changes to it are not needed for Python/UI-only updates.
     if entries['requirements.txt'] != (BASE / 'requirements.txt').read_bytes():
-        raise ValueError('This release needs new Python dependencies; install the Docker image through Dokploy')
+        raise ValueError('This release changes Python dependencies and cannot be installed into the existing runtime')
     image_docker=(BASE / 'Dockerfile').read_text('utf-8')
     new_docker=entries['Dockerfile'].decode('utf-8')
     # A version ARG change alone does not modify the installed image packages.
     def normalize_docker(value):
         return re.sub(r'(?m)^ARG RI_VERSION=[^\n]+$', 'ARG RI_VERSION=<release>', value)
     if normalize_docker(image_docker) != normalize_docker(new_docker):
-        raise ValueError('The Dockerfile changed; install the Docker image through Dokploy')
+        raise ValueError('This release changes the base container runtime and is not compatible with the installed runtime')
     return entries
 
 

@@ -13,10 +13,10 @@ Forknook is a standalone, self-hosted family recipe manager published by Gigabyt
 - Native photo upload and **automatic recipe photo capture**. Public image URLs are fetched when a recipe is saved, normalized with Pillow and stored in the persistent `/data/recipe-images` folder. Missing/rejected photos do not prevent saving; users may upload a photo manually. Photos from recipe sites, available social thumbnails and accessible KitchenOwl recipe image URLs are supported. Recipe photos are session-protected.
 - Meal planning, recipe-derived shopping lists, check-off and additional manual shopping items, feeds, and an Administration section for migration and app updates.
 - An installable PWA for iPad/iOS Safari with touch-friendly screens and directly bookmarkable routes. Android builds remain local in `android/`, using the committed Gradle wrapper and `android/build-apk.ps1` as in Calden.
-- Built-in server/PWA updater for compatible GitHub Releases and optional Dokploy-powered Docker image updates directly from Administration → Updates (single container, no Docker socket).
+- Built-in platform-agnostic server/PWA updater for checksum-verified compatible GitHub Releases (single container, no Docker socket, deployment integration or additional service).
 - Versioned `/api/v2` API with documented OpenAPI contract (`/api/v2/openapi.json`). Administrators can issue revocable, read-only API keys in `/app/admin/api`. API-key holders may read **only** explicitly published recipes and images for future external integrations; family-only recipes, notes, submissions and account data are not exposed.
 
-## Docker / Dokploy
+## Platform-agnostic container deployment
 
 ```yaml
 services:
@@ -74,25 +74,13 @@ The script identifies exactly one running Forknook Compose service, validates th
 Open **Administration → Imports & feeds** (`/app/admin/imports`). Provide the KitchenOwl instance's base URL and its authorized long-lived access token, load its households and select one. First choose **Preview migration**, then review the counts and choose **Copy recipes** if you want to proceed. The migration reads the household's recipe list and individual records, preserves compatible ingredient/step fields, copies accessible recipe photos, and keeps external source IDs to prevent re-importing the same KitchenOwl recipe twice. Forknook does **not** change or delete anything in KitchenOwl, and the token is not permanently stored in Forknook. Some proprietary KitchenOwl metadata or inaccessible image endpoints may require manual review. Repeat the process for each household, then compare the migrated collection against KitchenOwl before decommissioning it. JSON export import remains under **Administration → Backups**.
 
 
-## Updates in Forknook — no recurring manual Docker update commands
+## Self-contained application updates
 
-Use **Administration → Updates** (`/app/admin/updates`) for both types of updates:
+Go to **Administration → Updates** (`/app/admin/updates`). Forknook checks published GitHub Releases, downloads a checksum-verified server/UI package into the existing `/data/updates` directory, verifies file paths and runtime compatibility, and asks its built-in launcher to restart the application. An unsuccessful start triggers automatic rollback. The `/data` family database and photos are preserved. **No Docker socket, platform API, additional service or second container is involved.**
 
-- **Compatible server/UI update:** GitHub Releases package, checksum-verified, starts on the existing single container, and automatically restarts/rolls back on a failed health check.
-- **Docker image update:** Configure Dokploy once under the Updates page, using its base URL, the Compose application ID, and a scoped API key. Forknook calls the documented Dokploy Compose API to deploy the new published image. No Docker socket, additional container or host shell access is required. The Dokploy key stays in `/data/updates/dokploy.json` with private filesystem permissions and is never returned by the API.
+Application and PWA code are updateable inside the container as long as they remain compatible with the installed runtime. Changes requiring a different base image, operating-system packages, or launcher cannot be performed by an unprivileged container without intervention from the host runtime. Forknook reports such a release as incompatible rather than claiming the image itself was updated. For ordinary feature releases, keep runtime dependencies stable to preserve full in-app upgradeability.
 
-**Important Dokploy prerequisite:** Under the Forknook service in Dokploy's Compose YAML set:
-
-```yaml
-image: ghcr.io/gigabytegrove/forknook:latest
-pull_policy: always
-```
-
-Without `pull_policy: always`, Dokploy may recreate a cached old image instead of downloading the latest digest. The Updates page checks this setting before it permits a deployment. The Dokploy request explicitly uses `freshVolumes: false`; your `/data` volume must remain mounted. The screen displays the running version, image version and updater state separately.
-
-Existing Forknook images before 2.1.4 cannot operate the new Dokploy integration because that code is not in the running container. **One initial image upgrade through Dokploy is necessary**; after that, updates can be initiated from the Forknook UI. This avoids pretending an unprivileged container can replace its own Docker image.
-
-If GitHub does not publish a code-only Release because the repository's Actions token cannot create Releases, the Updates screen still checks the verified versioned GHCR image directly and can initiate a Dokploy image update. Release publication permissions must be repaired separately for the code-only release path.
+The obsolete deployment-platform integration, credentials, UI controls and REST endpoints were removed. On startup, Forknook deletes only the obsolete saved integration credential file; accounts, recipes, shopping lists, photos and update history are untouched.
 
 ## Developer API / future integrations
 
@@ -137,12 +125,8 @@ Open **Discover recipes** (`/app/discover`) to search the Wikibooks Cookbook or 
 
 When troubleshooting the KitchenOwl migration, a 422 from `/api/household` generally means KitchenOwl rejected the long-lived token (JWT validation). Generate the token within the same KitchenOwl instance, paste only the token, and use that instance's API-accessible URL. Forknook does not retain that token.
 
-The **Administration → Updates** screen distinguishes running server code, embedded image version, and persisted updater state. Docker redeploys are supported without a GitHub Release, but in-app updater releases require the repository GitHub Actions token to have Releases write permission.
+The **Administration → Updates** screen distinguishes running server code, embedded image version, and persisted updater state. Application updates require a published checksum-verified release; the built-in updater never controls the host container runtime.
 
-### In-app update verification from 2.1.4
-
-First install the pinned 2.1.4 Docker image. Then open Administration → Updates, check for v2.1.6 and choose the compatible server/UI update. The checksum-verified code is staged under /data/updates and Forknook requests a supervised restart with rollback on failed health check. Do not deploy the 2.1.6 Docker image before testing this route.
-
-## KitchenOwl long-lived token diagnostics (v2.1.6)
+## KitchenOwl long-lived token diagnostics
 
 Forknook locally checks JWT formatting and a complete HMAC signature segment before contacting KitchenOwl. This is a formatting check, not verification of authenticity. Known KitchenOwl validation errors, including signature errors and numeric JWT subject compatibility, are shown without echoing the token. Copy the entire LLT from KitchenOwl and revoke any token exposed in chat or logs. Import is read-only and copy-first.
