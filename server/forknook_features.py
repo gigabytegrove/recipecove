@@ -281,7 +281,27 @@ async def ko_get(client:httpx.AsyncClient,origin:str,token:str,path:str):
                 # Report it without aborting all the other recipes.
                 return None
             if r.status_code!=200:
-                raise HTTPException(502,f'KitchenOwl API returned HTTP {r.status_code} for {path.split("/")[-1] or "households"}')
+                # Flask-JWT-Extended commonly returns 422 for an invalid JWT.
+                # Read only a bounded diagnostic and never echo credentials.
+                sample=bytearray()
+                async for chunk in r.aiter_bytes():
+                    sample.extend(chunk[:2048-len(sample)])
+                    if len(sample)>=2048:break
+                reason=''
+                if len(sample)<2048:
+                    try:
+                        message=json.loads(sample)
+                        if isinstance(message,dict):
+                            reason=str(message.get('msg') or message.get('message') or '')
+                    except (ValueError,UnicodeError):pass
+                reason=re.sub(r'[^a-zA-Z0-9 ,.:;!?_()\/-]',' ',reason)[:120].strip()
+                body_forbidden=r.status_code in (401,403,422)
+                if body_forbidden:
+                    detail=f'KitchenOwl rejected the authentication token (HTTP {r.status_code}). Confirm the long-lived token is from this instance; paste the token only, without Bearer or quotes.'
+                else:
+                    detail=f'KitchenOwl API returned HTTP {r.status_code} for {path.split("/")[-1] or "households"}'
+                if reason and not body_forbidden:detail+=': '+reason
+                raise HTTPException(502,detail)
             data=bytearray()
             async for chunk in r.aiter_bytes():
                 data.extend(chunk)

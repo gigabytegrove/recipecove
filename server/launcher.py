@@ -95,6 +95,23 @@ def main():
     first = True
     while not EXITING:
         pointer = _read_pointer()
+        # A Docker image upgrade must win over an older persistent in-app
+        # code overlay, even if the operator redeployed through Dokploy rather
+        # than our manual script. Preserve the pointer for diagnostics.
+        image_version = os.environ.get('RI_IMAGE_VERSION', '2.0.0')
+        if pointer.get('release') and pointer.get('version'):
+            import re
+            def numbers(value):
+                match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)', str(value))
+                return tuple(map(int, match.groups())) if match else None
+            selected, image = numbers(pointer.get('version')), numbers(image_version)
+            if selected and image and selected < image:
+                backup = ACTIVE.with_name('active.before-image-update-' + str(int(time.time())) + '.json')
+                backup.write_bytes(ACTIVE.read_bytes())
+                LOG.warning('Saved old update pointer %s; newer image %s will be used', backup, image_version)
+                pointer = {'release': None, 'version': image_version}
+                _write(ACTIVE, pointer)
+                _status('ready', 100, f'Forknook {image_version} running from newer Docker image', version=image_version)
         try:
             path = _location(pointer)
         except RuntimeError as exc:

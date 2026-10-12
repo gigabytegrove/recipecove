@@ -2,7 +2,7 @@
 
 Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
 
-**Release: 2.1.1 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.1.2 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -106,3 +106,13 @@ node --check server/web/forknook.js
 ```
 
 Integration tests validate roles, permissions, reviews, migration idempotency, image storage/authorization, publishing, default categories, and routing. Browser/device interaction and real-world KitchenOwl/photo/social-media fetching must still be verified against your actual server and family devices before classifying the release as production-ready. When a site refuses photo downloads, Forknook preserves the recipe but may leave its picture as a placeholder.
+
+## Discover recipes / searchable recipe directories
+
+Open **Discover recipes** (`/app/discover`) to search the Wikibooks Cookbook or TheMealDB by dish name or ingredient. Browse photo cards, preview a candidate, edit the draft and save using the same family approval rules as all other recipes. Nothing is saved by searching or previewing. Catalogs are queried on demand with no indexing daemon or new container. 
+
+**TheMealDB** supplies structured ingredients and photos. Its public V1 key `1` is for personal/development/testing use; for publicly distributed products, the catalog requires a supporter key, configurable as `FORKNOOK_MEALDB_KEY`. Wikibooks uses its openly available community recipe search and may need manual cleanup because page formatting varies; retain source attribution. These sources require internet connectivity and are optional. RSS/Atom subscriptions remain under **Administration → Imports & feeds**, not in the main recipe discovery browser.
+
+When troubleshooting the KitchenOwl migration, a 422 from `/api/household` generally means KitchenOwl rejected the long-lived token (JWT validation). Generate the token within the same KitchenOwl instance, paste only the token, and use that instance's API-accessible URL. Forknook does not retain that token.
+
+The **Administration → Updates** screen distinguishes running server code, embedded image version, and persisted updater state. Docker redeploys are supported without a GitHub Release, but in-app updater releases require the repository GitHub Actions token to have Releases write permission.

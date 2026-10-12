@@ -835,7 +835,9 @@ async def import_json(file:UploadFile=File(...),dry_run:bool=True,who:dict=Depen
 
 @router.get("/admin/updates/status")
 def updates_status(who:dict=Depends(admin)):
-    return {'installed':updater.installed(),'operation':updater.state()}
+    return {'installed':updater.installed(),'operation':updater.state(),
+            'running_version':__import__('app').VERSION,
+            'image_version':os.environ.get('RI_IMAGE_VERSION','unknown')}
 
 @router.post("/admin/updates/check")
 async def updates_check(who:dict=Depends(admin)):

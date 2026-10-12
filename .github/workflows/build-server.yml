@@ -40,15 +40,15 @@ jobs:
         with:
           context: ./server
           build-args: |
-            RI_VERSION=2.1.1
+            RI_VERSION=2.1.2
           push: true
           platforms: linux/amd64
           tags: |
             ghcr.io/gigabytegrove/forknook:latest
-            ghcr.io/gigabytegrove/forknook:2.1.1
+            ghcr.io/gigabytegrove/forknook:2.1.2
           labels: |
             org.opencontainers.image.source=https://github.com/gigabytegrove/forknook
-            org.opencontainers.image.version=2.1.1
+            org.opencontainers.image.version=2.1.2
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
