@@ -125,3 +125,24 @@ def test_kitchenowl_read_only_migration_dry_run_idempotent(family):
     assert all(p.startswith('/api/household') for p in paths)
     assert c.post('/api/v2/admin/kitchenowl/import',headers=r['approver'],json=credentials).status_code==403
     assert c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={'url':'http://127.0.0.1','token':'t'*20,'household_id':1}).status_code==422
+
+
+def test_real_kitchenowl_markdown_roundtrip():
+    import kitchenowl
+    original={'title':'Sunday Roast','description':'A family classic',
+      'ingredients':[{'name':'potatoes','quantity':'2','unit':'cups','optional':False},{'name':'salt','quantity':'1','unit':'tsp'}],
+      'instructions':['Preheat the oven','Roast the potatoes'],'notes':'Serve with gravy',
+      'prep_time':15,'cook_time':40,'total_time':55,'servings':'4 servings',
+      'source_url':'https://recipes.example.org/roast','image_url':'https://recipes.example.org/roast.jpg'}
+    ko=kitchenowl.to_kitchenowl(original)
+    restored=ext._ko_recipe(ko)
+    assert restored.title=='Sunday Roast'
+    assert restored.description=='A family classic'
+    assert restored.instructions==['Preheat the oven','Roast the potatoes']
+    assert restored.notes=='Serve with gravy'
+    assert restored.ingredients[0]['raw']=='2 cups potatoes'
+    assert restored.ingredients[1]['raw']=='1 tsp salt'
+    assert restored.servings=='4 servings'
+    assert restored.total_time==55 and restored.prep_time==15 and restored.cook_time==40
+    assert restored.source_url==original['source_url']
+    assert restored.image_url==original['image_url']
