@@ -219,89 +219,64 @@ async function renderAdminImports(){
  content.replaceChildren(adminSectionNav(),container);
 }
 async function renderUpdaterPanel(){
- const status=node('p',{class:'muted',role:'status',text:'Loading update information…'});
+ const status=node('p',{class:'muted',role:'status',text:'Loading Forknook updater…'});
  const notice=node('p',{class:'muted small',role:'status',text:''});
- const error=node('p',{class:'warning',role:'alert',hidden:true});
+ const warning=node('p',{class:'warning',role:'alert',hidden:true});
  const progress=node('progress',{value:'0',max:'100',style:'width:100%;height:16px'});
- const latest=node('p',{class:'muted',text:'Checking for available versions…'});
- const btnCheck=button('Check for updates',check,'primary');
- const btnCode=button('Install server and UI update',installCode,'secondary');
- const btnImage=button('Update Docker image through Dokploy',installImage,'secondary');
- btnCode.disabled=true;btnImage.disabled=true;
- const dokployStatus=node('p',{class:'muted small',text:'Not connected'});
- const url=node('input',{type:'url',placeholder:'https://dokploy.example.com'});
- const compose=node('input',{placeholder:'Dokploy Compose application ID'});
- const secret=node('input',{type:'password',placeholder:'Dokploy API key (leave empty to retain current key)',autocomplete:'new-password'});
- const configure=button('Save Dokploy connection',async()=>{
-   const config=await api('/admin/updates/config',{method:'PUT',data:{url:url.value.trim(),compose_id:compose.value.trim(),api_key:secret.value||null}});
-   secret.value='';dokployStatus.textContent='Connection saved. Verify Compose configuration before deploying.';
-   await verifyConnection();
- },'primary');
- const verify=button('Verify connection',verifyConnection);
- const disconnect=button('Disconnect',async()=>{
-   if(!confirm('Remove the saved Dokploy API key from Forknook?'))return;
-   await api('/admin/updates/config',{method:'DELETE'});
-   dokployStatus.textContent='Disconnected';btnImage.disabled=true;
- });
- const main=card(node('h2',{text:'Application updates'}),
-  node('p',{class:'muted',text:'Update Forknook here. Compatible code and UI releases install inside this container; full Docker image updates are performed securely through your existing Dokploy installation.'}),
-  status,progress,latest,error,node('div',{class:'toolbar'},btnCheck,btnCode,btnImage),notice);
- const connection=card(node('h2',{text:'Dokploy connection · One-time setup'}),
-  node('p',{class:'muted',text:'To update the Docker image directly from Forknook, connect this installation to its existing Dokploy Compose application. No Docker socket or extra container is required. Use an API key with access limited to this deployment.'}),
-  node('div',{class:'form-grid'},node('label',{},'Dokploy URL',url),node('label',{},'Compose ID',compose),node('label',{class:'full'},'Dokploy API key',secret)),
-  node('div',{class:'toolbar'},configure,verify,disconnect),dokployStatus,
-  node('p',{class:'small muted',text:'Important: your Dokploy Compose service must use ghcr.io/gigabytegrove/forknook:latest with pull_policy: always. Without this, Dokploy can recreate the old cached image. No volumes are deleted.'}));
- content.replaceChildren(adminSectionNav(),main,connection);
- let latestCheck=null,active=false;
- function report(message){error.textContent=message;error.hidden=false;notice.textContent=message;}
+ const latest=node('p',{class:'muted',text:'Checking published releases…'});
+ const checkBtn=button('Check for updates',check,'primary');
+ const installBtn=button('Install update',install);
+ const rollbackBtn=button('Roll back last update',rollback);
+ installBtn.disabled=true;rollbackBtn.disabled=true;
+ const overview=card(node('h2',{text:'Application updates'}),
+  node('p',{class:'muted',text:'Forknook downloads and verifies compatible server and interface releases, saves them in persistent storage, and restarts itself with rollback protection. No deployment-platform connection, extra container, or host access is required.'}),
+  status,progress,latest,warning,node('div',{class:'toolbar'},checkBtn,installBtn,rollbackBtn),notice);
+ const help=card(node('h3',{text:'About this updater'}),
+  node('p',{class:'muted',text:'Updates are applied within Forknook. Changes requiring a different base container runtime or system packages cannot be installed by an unprivileged application. The updater identifies those releases instead of claiming they were installed.'}));
+ content.replaceChildren(adminSectionNav(),overview,help);
+ let latestCheck=null,checking=false,targetVersion=null;
+ const showError=message=>{warning.textContent=message;warning.hidden=false;notice.textContent=message;};
  async function refresh(){
   if(model.page!=='admin-updates'||!model.user)return;
   try{
-   const result=await api('/admin/updates/status');const op=result.operation||{},installed=result.installed||{};
-   progress.value=Number(op.progress||0);
-   status.textContent='Running '+(result.running_version||'unknown')+' · Docker image '+(result.image_version||'unknown')+' · updater '+(installed.version||'unknown')+' · '+(op.phase||'idle');
+   const result=await api('/admin/updates/status');
+   const op=result.operation||{},installed=result.installed||{};
+   progress.value=Math.max(0,Math.min(100,Number(op.progress)||0));
+   status.textContent='Running '+(result.running_version||'unknown')+' · Installed '+(installed.version||'unknown')+' · '+(op.phase||'idle');
    if(op.message)notice.textContent=op.message;
-   if(op.phase==='failed'&&op.message)report('Update failed: '+op.message);
-  }catch(e){report('Cannot read update status: '+e.message)}
+   rollbackBtn.disabled=!installed.previous||['checking','downloading','verifying','installing','restarting'].includes(op.phase);
+   if(op.phase==='failed'&&op.message)showError('Update failed: '+op.message);
+   if(targetVersion&&result.running_version===targetVersion&&op.phase==='ready')location.reload();
+  }catch(e){showError('Cannot read updater status: '+e.message)}
  }
  async function check(){
-  if(active)return;active=true;btnCheck.disabled=true;error.hidden=true;
-  latest.textContent='Checking published Forknook releases and Docker images…';
+  if(checking)return;checking=true;checkBtn.disabled=true;warning.hidden=true;
+  latest.textContent='Checking published Forknook releases…';
   try{
    latestCheck=await api('/admin/updates/check',{method:'POST'});
-   const data=latestCheck;
-   const codeMsg=data.latest_version?('Latest server/UI release: '+data.latest_version):'No server/UI release available';
-   const imageMsg=data.latest_image_version?('Latest Docker image: '+data.latest_image_version):'No newer published Docker image found';
-   latest.textContent=codeMsg+' · '+imageMsg;
-   btnCode.disabled=!data.available;
-   btnImage.disabled=!data.image_available;
-   if(data.code_error)notice.textContent=data.code_error;
-   else if(!data.available&&!data.image_available)notice.textContent='Forknook is up to date, or no newer verified release is available.';
-   else notice.textContent='Choose the available update type below.';
-  }catch(e){btnCode.disabled=true;btnImage.disabled=true;report('Update check failed: '+e.message)}
-  finally{active=false;btnCheck.disabled=false}
+   const r=latestCheck;
+   latest.textContent=r.latest_version?'Latest release: '+r.latest_version:'No published release found';
+   installBtn.disabled=!r.available;
+   if(r.code_error)showError(r.code_error);
+   else if(r.requires_image)notice.textContent='This release needs a different base runtime; it cannot be installed by the in-container updater.';
+   else notice.textContent=r.available?'A compatible update is ready to install.':'You are up to date.';
+  }catch(e){installBtn.disabled=true;showError('Update check failed: '+e.message)}
+  finally{checking=false;checkBtn.disabled=false}
  }
- async function installCode(){
+ async function install(){
   if(!latestCheck?.available)return;
-  if(!confirm('Install the verified Forknook code and UI update and restart the application?'))return;
-  try{await api('/admin/updates/install',{method:'POST'});btnCode.disabled=true;notice.textContent='Installing verified code package. Forknook will restart automatically; keep this tab open.';
-  }catch(e){report('Code update failed: '+e.message)}
+  if(!confirm('Install the verified Forknook update and restart the application?'))return;
+  try{
+   targetVersion=latestCheck.latest_version;
+   await api('/admin/updates/install',{method:'POST'});
+   installBtn.disabled=true;notice.textContent='Downloading and verifying update…';
+  }catch(e){targetVersion=null;showError('Install failed: '+e.message)}
  }
- async function installImage(){
-  const version=latestCheck?.latest_image_version;
-  if(!latestCheck?.image_available||!version)return;
-  if(!confirm('Update the Forknook Docker image to '+version+' through Dokploy? Your /data volume will remain mounted.'))return;
-  try{await api('/admin/updates/install-image',{method:'POST',data:{version}});
-   btnImage.disabled=true;notice.textContent='Dokploy deployment started. Forknook may disconnect briefly. Reload after the new image is ready.';
-  }catch(e){report('Dokploy update failed: '+e.message)}
+ async function rollback(){
+  if(!confirm('Restore the previous compatible Forknook application version?'))return;
+  try{targetVersion=null;await api('/admin/updates/rollback',{method:'POST'});notice.textContent='Rollback requested; the application will restart.'}
+  catch(e){showError('Rollback failed: '+e.message)}
  }
- async function verifyConnection(){
-  try{const result=await api('/admin/updates/verify',{method:'POST'});dokployStatus.textContent=result.message||'Dokploy connection verified';
-  }catch(e){dokployStatus.textContent='Dokploy verification failed: '+e.message}
- }
- try{const cfg=await api('/admin/updates/config');url.value=cfg.url||'';compose.value=cfg.compose_id||'';
-  dokployStatus.textContent=cfg.configured?'Connection saved (API key hidden)':'No Dokploy connection configured';
- }catch(e){report(e.message)}
  await refresh();await check();
  if(model.updaterTimer)clearInterval(model.updaterTimer);
  model.updaterTimer=setInterval(()=>{if(model.page==='admin-updates'&&model.user)refresh();else clearInterval(model.updaterTimer)},5000);

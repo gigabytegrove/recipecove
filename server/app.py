@@ -37,6 +37,9 @@ async def lifespan(app: FastAPI):
     kitchenowl.initialize()
     forknook.initialize()
     forknook_features.initialize()
+    # Purge credentials from the removed platform-specific update integration.
+    # This affects no family recipes, users, or updater release state.
+    (Path(os.environ.get('DATA_DIR', '/data')) / 'updates' / 'dokploy.json').unlink(missing_ok=True)
     yield
 
 

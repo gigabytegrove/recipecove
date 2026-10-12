@@ -26,6 +26,8 @@ def family(tmp_path):
                 roles[role]={'Authorization':'Bearer '+session.json()['token']}
             yield client,admin,roles
 
+KO_TOKEN='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOjF9.' + ('A'*43)  # fixture only, no usable credential
+
 SAMPLE={'title':'Dinner Potatoes','ingredients':[{'name':'Potatoes','raw':'Potatoes'}],'instructions':['Bake for 40 minutes']}
 
 def test_default_categories_and_roles(family):
@@ -102,12 +104,12 @@ def test_kitchenowl_read_only_migration_dry_run_idempotent(family):
     paths=[]
     async def ko_get(client,origin,token,path):
         paths.append(path)
-        assert token=='t'*20
+        assert token==KO_TOKEN
         if path=='/api/household':return [{'id':7,'name':'Home'}]
         if path=='/api/household/7/recipe':return [{'id':12,'name':'Old Soup'}]
         if path=='/api/recipe/12':return {'id':12,'name':'Old Soup','items':{'1 cup water':None},'instructions':['Boil']}
         raise AssertionError('Unexpected KitchenOwl path: '+path)
-    credentials={'url':'http://192.168.3.12:8080','token':'t'*20,'household_id':7}
+    credentials={'url':'http://192.168.3.12:8080','token':KO_TOKEN,'household_id':7}
     with patch.object(ext,'ko_get',side_effect=ko_get):
         hs=c.post('/api/v2/admin/kitchenowl/households',headers=admin,json=credentials)
         assert hs.json()==[{'id':7,'name':'Home'}]
@@ -125,7 +127,7 @@ def test_kitchenowl_read_only_migration_dry_run_idempotent(family):
     assert '/api/recipe/12' in paths
     assert all(p.startswith('/api/household') or p.startswith('/api/recipe/') for p in paths)
     assert c.post('/api/v2/admin/kitchenowl/import',headers=r['approver'],json=credentials).status_code==403
-    assert c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={'url':'http://127.0.0.1','token':'t'*20,'household_id':1}).status_code==422
+    assert c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={'url':'http://127.0.0.1','token':KO_TOKEN,'household_id':1}).status_code==422
 
 
 def test_real_kitchenowl_markdown_roundtrip():
@@ -155,7 +157,7 @@ def test_kitchenowl_detail_url_and_missing_recipe_dont_cancel_other_imports(fami
     paths=[]
     def respond(request):
         paths.append(request.url.path)
-        if request.headers.get('Authorization') != 'Bearer '+('t'*20):
+        if request.headers.get('Authorization') != 'Bearer '+(KO_TOKEN):
             return httpx.Response(401)
         if request.url.path=='/api/household/7/recipe':
             return httpx.Response(200,json=[{'id':14,'name':'Deleted recipe'},{'id':15,'name':'Good soup'}])
@@ -167,7 +169,7 @@ def test_kitchenowl_detail_url_and_missing_recipe_dont_cancel_other_imports(fami
     original=httpx.AsyncClient
     def client_factory(*args,**kwargs):
         return original(*args,transport=httpx.MockTransport(respond),**kwargs)
-    body={'url':'http://192.168.3.12:8080','token':'t'*20,'household_id':7}
+    body={'url':'http://192.168.3.12:8080','token':KO_TOKEN,'household_id':7}
     with patch.object(ext.httpx,'AsyncClient',side_effect=client_factory):
         dry=c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={**body,'dry_run':True})
         assert dry.status_code==200,dry.text
