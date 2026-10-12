@@ -1,5 +1,6 @@
 """The Forknook updater is entirely in-process, independent of host orchestrators."""
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -41,7 +42,7 @@ def test_incompatible_runtime_is_not_offered_as_in_app_update(tmp_path, monkeypa
 
 
 def test_removed_external_deployment_endpoints_and_client(tmp_path):
-    with patch.object(base,'DATA_DIR',tmp_path),patch.object(base,'DB_FILE',tmp_path/'forknook.sqlite3'),patch.object(base,'CLAIM_FILE',tmp_path/'.claim'):
+    with patch.dict(os.environ, {'DATA_DIR':str(tmp_path)}),patch.object(base,'DATA_DIR',tmp_path),patch.object(base,'DB_FILE',tmp_path/'forknook.sqlite3'),patch.object(base,'CLAIM_FILE',tmp_path/'.claim'):
         former_credentials=tmp_path / 'updates' / 'dokploy.json'
         former_credentials.parent.mkdir(parents=True,exist_ok=True)
         former_credentials.write_text('{"api_key":"must-not-persist"}',encoding='utf-8')

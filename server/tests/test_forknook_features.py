@@ -253,10 +253,11 @@ def test_kitchenowl_invalid_token_rejection_is_explicit(family):
     original=httpx.AsyncClient
     with patch.object(ext.httpx,'AsyncClient',side_effect=lambda *a,**kw:original(*a,transport=httpx.MockTransport(respond),**kw)):
         r=c.post('/api/v2/admin/kitchenowl/households',headers=admin,
-           json={'url':'https://recipes.example.com','token':'wrong long lived token'})
+           json={'url':'https://recipes.example.com','token':KO_TOKEN})
     assert r.status_code==502
     assert 'rejected the authentication token (HTTP 422)' in r.json()['detail']
-    assert 'wrong long lived token' not in r.text
+    assert KO_TOKEN not in r.text
+    assert 'Signature verification failed' in r.json()['detail']
 
 
 def test_updater_reports_runtime_and_docker_versions(family):
