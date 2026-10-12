@@ -3,7 +3,7 @@
 # Does not deploy a second stack, modify Compose files, or remove user data.
 set -Eeuo pipefail
 IMAGE='ghcr.io/gigabytegrove/forknook:latest'
-EXPECTED="${FORKNOOK_TARGET_VERSION:-2.1.4}"
+EXPECTED="${FORKNOOK_TARGET_VERSION:-2.1.5}"
 [[ "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid Forknook version" >&2; exit 1; }
 PINNED_IMAGE="ghcr.io/gigabytegrove/forknook:$EXPECTED"
 
