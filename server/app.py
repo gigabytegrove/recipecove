@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import uuid
 import re
 import os
 import time
@@ -11,7 +13,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -25,7 +27,7 @@ import recipes
 import settings_store
 import updater
 
-VERSION = "2.1.2"
+VERSION = "2.1.3"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -40,6 +42,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Forknook", version=VERSION, lifespan=lifespan,
               docs_url=None, redoc_url=None, openapi_url=None)
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    # Avoid leaking tokens, internal filenames or tracebacks to family clients.
+    # Container logs retain the traceback and correlation ID for diagnosis.
+    ref=uuid.uuid4().hex[:12]
+    logging.getLogger('forknook.errors').exception(
+        'Unexpected server error %s %s [%s]',request.method,request.url.path,ref,
+        exc_info=(type(exc),exc,exc.__traceback__))
+    return JSONResponse(status_code=500,content={
+        'detail':f'Forknook encountered a server error. Reference: {ref}',
+        'error_ref':ref})
+
 
 
 class LoginBody(BaseModel):
