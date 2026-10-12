@@ -62,13 +62,13 @@ def test_users_roles_permissions_and_last_admin(client):
 
 def test_recipes_categories_and_states(client):
     c,h=client
-    category=c.post('/api/v2/categories',headers=h,json={'name':'Dinner','color':'#ff3300'})
+    category=c.post('/api/v2/categories',headers=h,json={'name':'Family Sunday Dinner','color':'#ff3300'})
     assert category.status_code==201
     cid=category.json()['id']
     created=c.post('/api/v2/recipes',headers=h,json={**SAMPLE,'category_id':cid})
     assert created.status_code==201,created.text
     rid=created.json()['id']
-    assert c.get('/api/v2/recipes',headers=h).json()[0]['category']=='Dinner'
+    assert c.get('/api/v2/recipes',headers=h).json()[0]['category']=='Family Sunday Dinner'
     assert c.get('/api/v2/recipes?q=homemade',headers=h).json()[0]['id']==rid
     assert c.put(f'/api/v2/recipes/{rid}/state',headers=h,json={'state':'want'}).status_code==200
     assert c.get('/api/v2/recipes?state=want',headers=h).json()[0]['state']=='want'

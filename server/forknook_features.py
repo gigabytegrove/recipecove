@@ -297,27 +297,63 @@ async def kitchenowl_households(body:KitchenOwlSource,who:dict=Depends(base.admi
 
 
 def _ko_recipe(record:dict)->base.RecipePayload:
+    """Convert an actual KitchenOwl record, including Markdown instructions.
+
+    KitchenOwl stores recipe instructions in `description` on some versions;
+    older Recipe Importer writes `## Instructions` and `## Notes` there. Never
+    mistake that entire Markdown block for the recipe's short description.
+    """
     title=str(record.get('name') or record.get('title') or '').strip()[:300]
     if not title:raise ValueError('Recipe has no title')
     raw=record.get('items') or record.get('ingredients') or []
-    ings=[]
     if isinstance(raw,dict):raw=list(raw.keys())
+    ingredients=[]
     for item in raw if isinstance(raw,list) else []:
-        if isinstance(item,str): name=item
-        elif isinstance(item,dict):name=str(item.get('name') or item.get('text') or item.get('raw') or '')
+        if isinstance(item,str):text=item
+        elif isinstance(item,dict):
+            name=str(item.get('name') or item.get('text') or item.get('raw') or '').strip()
+            qualifier=str(item.get('description') or item.get('quantity') or '').strip()
+            unit=str(item.get('unit') or '').strip()
+            text=' '.join(x for x in (qualifier,unit,name) if x).strip()
+            if item.get('optional'):text+=' (optional)'
         else:continue
-        if name.strip():ings.append({'name':name[:500],'raw':name[:500]})
-    instructions=record.get('instructions') or record.get('steps') or []
-    if isinstance(instructions,str):instructions=[x.strip() for x in instructions.splitlines() if x.strip()]
-    if isinstance(instructions,list):instructions=[str(x.get('text') or x.get('description') or '') if isinstance(x,dict) else str(x) for x in instructions]
-    else:instructions=[]
-    photo=record.get('image_url') or record.get('image') or record.get('photo') or record.get('picture') or ''
+        if text.strip():ingredients.append({'name':text[:500],'raw':text[:500]})
+
+    full=str(record.get('description') or '')
+    parts=re.split(r'(?im)^\s*#{1,6}\s+(Instructions|Directions|Steps|Method|Notes)\s*$',full)
+    summary=parts[0].strip()
+    embedded_steps=[]
+    embedded_notes=[]
+    for index in range(1,len(parts)-1,2):
+        heading=parts[index].casefold()
+        section=parts[index+1].strip()
+        if heading=='notes':
+            if section:embedded_notes.append(section)
+        else:
+            for line in section.splitlines():
+                line=re.sub(r'^\s*(?:\d+[.)]|[-*•])\s+','',line).strip()
+                if line:embedded_steps.append(line)
+    steps=record.get('instructions') or record.get('steps') or embedded_steps
+    if isinstance(steps,str):steps=[x.strip() for x in steps.splitlines() if x.strip()]
+    if isinstance(steps,list):
+        steps=[str(x.get('text') or x.get('description') or '') if isinstance(x,dict) else str(x) for x in steps]
+    else:steps=[]
+    notes='\n\n'.join(x for x in (str(record.get('notes') or '').strip(),*embedded_notes) if x)
+    photo=record.get('image_url') or record.get('photo') or record.get('image') or record.get('picture') or ''
     if isinstance(photo,dict):photo=photo.get('url') or photo.get('src') or ''
     if not isinstance(photo,str):photo=''
-    return base.RecipePayload(title=title,image_url=photo[:2000],description=str(record.get('description') or '')[:6000],
-        ingredients=ings[:200],instructions=[s[:3000] for s in instructions if s.strip()][:100],
-        notes=str(record.get('notes') or '')[:30000],servings=str(record.get('servings') or '')[:200] or None,
-        source_url=str(record.get('source_url') or '')[:2000])
+    servings=record.get('servings') or record.get('yields') or ''
+    if isinstance(servings,int):servings=str(servings)+' servings'
+    def safe_time(key):
+        try:return max(0,int(record[key])) if record.get(key) is not None else None
+        except (TypeError,ValueError,OverflowError):return None
+    return base.RecipePayload(title=title,image_url=photo[:2000],description=summary[:6000],
+        ingredients=ingredients[:200],instructions=[x.strip()[:3000] for x in steps if x.strip()][:100],
+        notes=notes[:30000],servings=str(servings)[:200] or None,
+        prep_time=safe_time('prep_time'),cook_time=safe_time('cook_time'),
+        total_time=safe_time('total_time') or safe_time('time'),
+        source_url=str(record.get('source_url') or record.get('source') or '')[:2000])
+
 
 @router.post('/admin/kitchenowl/import')
 async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
