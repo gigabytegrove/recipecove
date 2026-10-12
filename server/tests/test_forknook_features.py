@@ -180,3 +180,86 @@ def test_kitchenowl_detail_url_and_missing_recipe_dont_cancel_other_imports(fami
         assert c.get('/api/v2/recipes',headers=admin).json()[0]['title']=='Good soup'
     assert '/api/recipe/14' in paths and '/api/recipe/15' in paths
     assert '/api/household/7/recipe/14' not in paths
+
+
+def test_catalog_name_ingredient_search_preview_and_approval(family):
+    import forknook_catalog as catalog
+    c,admin,roles=family
+    calls=[]
+    async def mock_get(url,params):
+        calls.append((url,params))
+        if 'search.php' in url:
+            return {'meals':[{'idMeal':'52772','strMeal':'Herb Chicken','strMealThumb':'https://www.themealdb.com/img.jpg','strCategory':'Chicken'}]}
+        if 'filter.php' in url:
+            return {'meals':[{'idMeal':'52772','strMeal':'Herb Chicken'}]}
+        if 'lookup.php' in url:
+            return {'meals':[{'idMeal':'52772','strMeal':'Herb Chicken','strInstructions':'Heat pan. Add chicken. Serve.',
+              'strIngredient1':'chicken','strMeasure1':'2 cups','strIngredient2':'salt','strMeasure2':'1 tsp',
+              'strMealThumb':'https://www.themealdb.com/images/media/meals/chicken.jpg','strCategory':'Chicken'}]}
+        raise AssertionError('Unrecognized lookup '+url)
+    with patch.object(catalog,'_get_json',side_effect=mock_get):
+        found=c.get('/api/v2/discovery/search?provider=themealdb&mode=name&q=chicken',headers=admin)
+        assert found.status_code==200,found.text
+        assert found.json()['items'][0]['id']=='52772'
+        found2=c.get('/api/v2/discovery/search?provider=themealdb&mode=ingredient&q=chicken%20breast',headers=admin)
+        assert found2.status_code==200
+        assert calls[-1][1]['i']=='chicken_breast'
+        draft=c.get('/api/v2/discovery/preview?provider=themealdb&id=52772',headers=roles['contributor'])
+        assert draft.status_code==200,draft.text
+        data=draft.json()
+        assert data['image_url'].startswith('https://www.themealdb.com/')
+        assert len(data['ingredients'])==2 and len(data['instructions'])==3
+        assert c.get('/api/v2/recipes',headers=admin).json()==[]
+        assert c.put('/api/v2/admin/family/settings',headers=admin,json={'require_approval':True}).status_code==200
+        posted=c.post('/api/v2/recipes',headers=roles['contributor'],json=data)
+        assert posted.status_code==201 and posted.json()['pending']
+        assert c.get('/api/v2/recipes',headers=admin).json()==[]
+        approved=c.post('/api/v2/submissions/'+str(posted.json()['id'])+'/approve',
+                        headers=roles['approver'],json={})
+        assert approved.status_code==200
+        assert len(c.get('/api/v2/recipes',headers=admin).json())==1
+    assert c.get('/api/v2/discovery/providers').status_code==401
+    assert c.get('/api/v2/discovery/preview?provider=themealdb&id=../../admin',headers=admin).status_code==422
+
+
+def test_wikibooks_catalog_search_and_preview(family):
+    import forknook_catalog as catalog
+    c,admin,_=family
+    async def mock_get(url,params):
+        assert url=='https://en.wikibooks.org/w/api.php'
+        if params.get('list')=='search':
+            assert 'prefix:Cookbook:' in params['srsearch']
+            return {'query':{'search':[{'title':'Cookbook:Potato Soup','snippet':'Soup made with <span class="searchmatch">potatoes</span>'},
+                                       {'title':'Main Page','snippet':'Not a recipe'}]}}
+        return {'parse':{'text':{'*':'<h2>Ingredients</h2><ul><li>2 potatoes</li></ul><h2>Directions</h2><ol><li>Boil potatoes</li></ol>'}}}
+    with patch.object(catalog,'_get_json',side_effect=mock_get):
+        results=c.get('/api/v2/discovery/search?provider=wikibooks&mode=ingredient&q=potatoes',headers=admin)
+        assert results.status_code==200 and len(results.json()['items'])==1
+        assert results.json()['items'][0]['description']=='Soup made with potatoes'
+        detail=c.get('/api/v2/discovery/preview?provider=wikibooks&id=Cookbook%3APotato%20Soup',headers=admin)
+        assert detail.status_code==200,detail.text
+        assert detail.json()['ingredients'][0]['raw']=='2 potatoes'
+        assert detail.json()['instructions'][0]=='Boil potatoes'
+    assert c.get('/api/v2/recipes',headers=admin).json()==[]
+
+
+def test_kitchenowl_invalid_token_rejection_is_explicit(family):
+    import httpx
+    c,admin,_=family
+    def respond(request):
+        return httpx.Response(422,json={'msg':'Signature verification failed'})
+    original=httpx.AsyncClient
+    with patch.object(ext.httpx,'AsyncClient',side_effect=lambda *a,**kw:original(*a,transport=httpx.MockTransport(respond),**kw)):
+        r=c.post('/api/v2/admin/kitchenowl/households',headers=admin,
+           json={'url':'https://recipes.example.com','token':'wrong long lived token'})
+    assert r.status_code==502
+    assert 'rejected the authentication token (HTTP 422)' in r.json()['detail']
+    assert 'wrong long lived token' not in r.text
+
+
+def test_updater_reports_runtime_and_docker_versions(family):
+    c,admin,_=family
+    response=c.get('/api/v2/admin/updates/status',headers=admin)
+    assert response.status_code==200
+    assert response.json()['running_version']=='2.1.2'
+    assert 'image_version' in response.json()

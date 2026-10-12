@@ -19,12 +19,13 @@ from starlette.concurrency import run_in_threadpool
 import kitchenowl
 import forknook
 import forknook_features
+import forknook_catalog
 import media
 import recipes
 import settings_store
 import updater
 
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -113,7 +114,7 @@ def guard_login(ip: str) -> None:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": VERSION, "kitchenowl_configured": settings_store.configured()}
+    return {"status": "ok", "version": VERSION, "image_version": os.environ.get("RI_IMAGE_VERSION", "unknown"), "kitchenowl_configured": settings_store.configured()}
 
 
 @app.get("/")
@@ -338,6 +339,7 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
 # deployments and mobile clients continue to function during migration.
 app.include_router(forknook.router)
 app.include_router(forknook_features.router)
+app.include_router(forknook_catalog.router)
 
 @app.get('/api/v2/openapi.json',include_in_schema=False)
 def forknook_openapi():
@@ -376,7 +378,7 @@ def forknook_asset(asset_name:str):
 
 # Bookmarked and directly loaded SPA routes must return the same app shell.
 # Reject any unknown path instead of making every URL return HTTP 200.
-_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|review|categories|admin(?:/(?:users|backups|updates|ai|imports|review|api))?)")
+_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|discover|review|categories|admin(?:/(?:users|backups|updates|ai|imports|review|api))?)")
 
 @app.get("/app/{client_path:path}")
 def forknook_route(client_path: str):
