@@ -19,7 +19,7 @@ import media
 import recipes
 import settings_store
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
