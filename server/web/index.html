@@ -28,7 +28,17 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <label for="admin-ai-key">Replace OpenAI API key</label><input id="admin-ai-key" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
 <label for="admin-ai-model">OpenAI model</label><input id="admin-ai-model" required>
 <label for="admin-password-change">New administrator password (optional)</label><input id="admin-password-change" type="password" minlength="12" autocomplete="new-password" placeholder="Leave blank to keep current password">
-<div class="row"><button type="submit">Save and verify connection</button><button id="settings-close" class="secondary" type="button">Back to importer</button></div></form></section>
+<div class="row"><button type="submit">Save and verify connection</button><button id="settings-close" class="secondary" type="button">Back to importer</button></div></form>
+<div id="updater-section" style="margin-top:28px;border-top:1px solid #dbe4eb;padding-top:20px">
+<h2>Application updates</h2>
+<p class="muted">Check Recipe Importer’s own GitHub releases and install compatible server/UI updates directly. No Docker socket, separate updater container, or command line required.</p>
+<div class="row"><div><label>Installed version</label><div id="update-current" style="font-weight:700">Checking…</div></div>
+<div><label>Latest release</label><div id="update-latest" style="font-weight:700">Not checked</div></div></div>
+<div class="row"><button id="update-check" class="secondary" type="button">Check for updates</button><button id="update-install" type="button" disabled>Install update</button><button id="update-rollback" class="secondary" type="button" disabled>Roll back</button></div>
+<div style="margin-top:16px"><div class="row" style="align-items:center"><strong id="update-phase">Updater ready</strong><span id="update-percent" style="text-align:right">0%</span></div>
+<progress id="update-progress" value="0" max="100" style="width:100%;height:18px;accent-color:#216dc6"></progress>
+<p id="update-detail" class="caption" role="status" aria-live="polite">Updates are checked on demand.</p>
+<p id="update-compat" class="caption">Updates that change Python dependencies, system packages, or the Docker launcher require a standard image redeploy.</p></div></div></section>
 <section id="admin-login" class="card hidden"><h1>Administrator sign-in</h1><p class="muted">Use the administrator password created during Recipe Importer setup.</p>
 <form id="admin-login-form"><label for="admin-login-password">Administrator password</label><input id="admin-login-password" type="password" autocomplete="current-password" required><button type="submit">Sign in</button></form></section>
 <section id="login" class="card hidden"><h1>KitchenOwl account sign-in</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household. Administrators may use the sign-in above instead.</p>
@@ -45,6 +55,7 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 'use strict';
 const $ = id => document.getElementById(id);
 let token = sessionStorage.getItem('ri_token') || '', current = null, busy = false, admin = false;
+let latestRelease = null, updaterBusy = false, updaterMonitor = null;
 const fields = ['title','description','ingredients','instructions','servings','notes','prep','cook','total','url'];
 function message(text, kind=''){ $('message').textContent=text; $('message').className=kind; }
 function connected(yes, isAdmin=false){admin=Boolean(yes&&isAdmin);$('login').classList.toggle('hidden',yes);$('admin-login').classList.toggle('hidden',yes);$('workspace').classList.toggle('hidden',!yes);$('logout').classList.toggle('hidden',!yes);$('settings-button').classList.toggle('hidden',!admin);$('setup').classList.add('hidden');$('admin-settings').classList.add('hidden');}
@@ -119,8 +130,60 @@ function setupPayload(){return {setup_code:$('setup-code').value.trim(),kitcheno
 $('setup-test').addEventListener('click',async()=>{try{message('Testing KitchenOwl connection…');const result=await setupRequest('/api/setup/test',setupPayload());message('Connection successful. '+result.households+' household(s) found.','success');}catch(err){message(err.message,'error');}});
 $('setup-form').addEventListener('submit',async e=>{e.preventDefault();$('setup-save').disabled=true;try{message('Verifying and saving KitchenOwl connection…');const result=await setupRequest('/api/setup/complete',{...setupPayload(),admin_password:$('setup-password').value,openai_api_key:$('setup-ai-key').value,openai_model:'gpt-4o-mini'});token=result.token;sessionStorage.setItem('ri_token',token);$('setup-code').value='';$('setup-llt').value='';$('setup-password').value='';$('setup-ai-key').value='';connected(true,true);await load();message('Setup complete. You can now import recipes.','success');}catch(err){message(err.message,'error');}finally{$('setup-save').disabled=false;}});
 $('admin-login-form').addEventListener('submit',async e=>{e.preventDefault();try{message('Signing in…');const data=await setupRequest('/api/admin/login',{password:$('admin-login-password').value});token=data.token;sessionStorage.setItem('ri_token',token);$('admin-login-password').value='';connected(true,true);await load();message('Administrator connected.','success');}catch(err){message(err.message,'error');}});
-$('settings-button').addEventListener('click',async()=>{try{const status=await api('/api/admin/settings');$('admin-url').value=status.kitchenowl_url;$('admin-ai-model').value=status.openai_model;$('admin-llt').value='';$('admin-ai-key').value='';$('admin-password-change').value='';$('admin-settings').classList.remove('hidden');$('workspace').classList.add('hidden');message('');}catch(err){message(err.message,'error');}});
+$('settings-button').addEventListener('click',async()=>{try{const status=await api('/api/admin/settings');$('admin-url').value=status.kitchenowl_url;$('admin-ai-model').value=status.openai_model;$('admin-llt').value='';$('admin-ai-key').value='';$('admin-password-change').value='';$('admin-settings').classList.remove('hidden');$('workspace').classList.add('hidden');message('');await refreshUpdater();}catch(err){message(err.message,'error');}});
 $('settings-close').addEventListener('click',()=>{$('admin-settings').classList.add('hidden');$('workspace').classList.remove('hidden');});
 $('admin-settings-form').addEventListener('submit',async e=>{e.preventDefault();try{message('Testing and saving connection…');const req={kitchenowl_url:$('admin-url').value.trim(),kitchenowl_llt:$('admin-llt').value.trim(),openai_model:$('admin-ai-model').value.trim()};if($('admin-ai-key').value.trim())req.openai_api_key=$('admin-ai-key').value.trim();if($('admin-password-change').value)req.new_admin_password=$('admin-password-change').value;await api('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});$('admin-llt').value='';$('admin-ai-key').value='';$('admin-password-change').value='';$('admin-settings').classList.add('hidden');$('workspace').classList.remove('hidden');await load();message('Server configuration saved and verified.','success');}catch(err){message(err.message,'error');}});
+function updaterMessage(label, value){$(label).textContent=value;}
+async function refreshUpdater(){
+ try{
+  const result=await api('/api/admin/updates/status');
+  const active=result.installed||{},status=result.operation||{};
+  updaterMessage('update-current',active.version||'Unknown');
+  updaterMessage('update-phase',String(status.phase||'idle').replaceAll('_',' '));
+  const progress=Number(status.progress)||0;
+  $('update-progress').value=progress;updaterMessage('update-percent',progress+'%');
+  updaterMessage('update-detail',status.message||'Ready to check for updates');
+  updaterBusy=['checking','downloading','verifying','installing','restarting'].includes(status.phase);
+  $('update-check').disabled=updaterBusy;
+  $('update-install').disabled=updaterBusy||!latestRelease?.available;
+  $('update-rollback').disabled=updaterBusy||!active.previous;
+  if(status.phase==='ready'||status.phase==='rolled_back'){
+   if(latestRelease&&active.version===latestRelease.latest_version)latestRelease.available=false;
+   $('update-install').disabled=!latestRelease?.available;
+  }
+ }catch(err){
+  // Expected while the application process restarts during an installation.
+  updaterMessage('update-detail','Waiting for the server to finish restarting… '+err.message);
+ }
+}
+$('update-check').addEventListener('click',async()=>{
+ $('update-check').disabled=true;updaterMessage('update-phase','Checking for updates');
+ updaterMessage('update-detail','Contacting GitHub Releases…');
+ try{
+  latestRelease=await api('/api/admin/updates/check',{method:'POST'});
+  updaterMessage('update-current',latestRelease.current_version);
+  updaterMessage('update-latest',latestRelease.latest_version);
+  updaterMessage('update-detail',latestRelease.available?'A newer version is available. Install it when ready.':'You are using the latest published version.');
+  updaterMessage('update-phase',latestRelease.available?'Update available':'Up to date');
+  $('update-install').disabled=!latestRelease.available;
+ }catch(err){updaterMessage('update-detail','Update check failed: '+err.message);}
+ finally{$('update-check').disabled=false;}
+});
+$('update-install').addEventListener('click',async()=>{
+ if(!latestRelease?.available||updaterBusy)return;
+ if(!confirm('Install Recipe Importer '+latestRelease.latest_version+'? The app will restart briefly. Your configuration and imported recipes will be preserved.'))return;
+ try{
+  $('update-install').disabled=true;
+  await api('/api/admin/updates/install',{method:'POST'});
+  updaterMessage('update-detail','Downloading and verifying update…');
+  await refreshUpdater();
+ }catch(err){updaterMessage('update-detail','Cannot install update: '+err.message);}
+});
+$('update-rollback').addEventListener('click',async()=>{
+ if(!confirm('Restore the previous Recipe Importer server version?'))return;
+ try{await api('/api/admin/updates/rollback',{method:'POST'});await refreshUpdater();}
+ catch(err){updaterMessage('update-detail','Rollback failed: '+err.message);}
+});
+updaterMonitor=setInterval(()=>{if(admin&&!$('admin-settings').classList.contains('hidden'))refreshUpdater();},2000);
 boot();
 </script></body></html>
