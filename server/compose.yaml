@@ -1,0 +1,24 @@
+services:
+  recipe-bridge-extractor:
+    build: .
+    restart: unless-stopped
+    environment:
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Set BRIDGE_TOKEN in .env}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:8999:8999"
+    volumes:
+      - whisper-models:/models
+      # Optional: your own exported Instagram cookies if authorized to use them
+      # - ./instagram_cookies.txt:/run/secrets/instagram_cookies.txt:ro
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=300m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 3g
+volumes:
+  whisper-models:

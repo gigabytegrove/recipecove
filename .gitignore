@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.env
+*.sqlite3
+*.mp4
+*.apk
+server/instagram_cookies.txt
