@@ -1,4 +1,4 @@
-# Recipe Importer 1.3.1
+# Recipe Importer 1.4.0
 
 **One Docker container. One native Android app. Direct KitchenOwl integration. No KO-Pellet or bridge.**
 
@@ -6,6 +6,7 @@ This self-hosted recipe importer parses regular recipe websites, pasted text, ph
 
 ## Features
 
+- **Native in-app server updater** in Settings, with GitHub Release version checks, download/verification progress, one-click restart, health-check rollback, and no Docker socket. Updates modifying Docker dependencies or base image still require Dokploy redeploy.
 - **First-run web setup wizard** after Docker deployment: KitchenOwl URL, LLT, administrator password and optional OpenAI key. The container starts before KitchenOwl is configured.
 - KitchenOwl username/password authentication for additional users and native Android, plus a dedicated admin sign-in using the configured LLT. Per-device sessions remain in SQLite.
 - Household selection, duplicate-name checks, and direct KitchenOwl recipe creation.
@@ -60,9 +61,9 @@ If you build from source instead, `cd server && docker compose up -d --build` us
 
 To update the KitchenOwl URL or LLT later, sign in as administrator on the web interface and select **Settings**. No container recreation is needed. Configuration, including the LLT and optional OpenAI key, is encrypted in `/data`, with the local encryption key also stored in `/data` (protect backups of this volume and restrict access to Docker host/root). Back up this entire volume; losing its key renders encrypted configuration unreadable. The server never returns stored tokens to browsers in settings/status endpoints. New KitchenOwl settings invalidate previously saved per-user sessions, but the administrator's LLT-based session remains valid.
 
-Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.3.1`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
+Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.4.0`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
 
-A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.3.1`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
+A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.4.0`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
 
 ### Low-memory operation (default)
 
@@ -134,7 +135,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.3.1, intended for testing and verification on your network before migrating all recipe imports.
+Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.4.0, intended for testing and verification on your network before migrating all recipe imports.
 
 ## Recipe URL import and HTTP 403 responses
 
@@ -153,3 +154,11 @@ Some Facebook and Instagram links cannot be downloaded, including login-required
 ### v1.3.1 speech extraction visibility
 
 The recipe preview reports whether video media was downloaded, whether the Whisper worker recognized spoken words, and whether video-frame OCR found readable text. Failed speech extraction is no longer silently reported as a complete video extraction. Empty VAD results are retried once without VAD, with the same single CPU worker and no persistent AI memory. A caption-only Facebook/Instagram fallback explicitly states that video was not downloaded. Use `docker logs --tail 100 recipe-importer` to inspect non-sensitive worker exit codes if speech extraction fails.
+
+## Native application updater — 1.4.0+
+
+Sign in as the Recipe Importer administrator, choose **Settings → Application updates**, and click **Check for updates**. The page shows the current version, newest published GitHub Release, a visible download/verification/restart progress bar, and a rollback button where a previous update exists. **Install update** is enabled only when a newer published version exists. After install, the permanent in-container launcher restarts the web server process and verifies `/health`; if it fails to start, the launcher switches back to the previous version automatically. A copy of each installed release remains in `/data/updates/releases`, and no Docker socket, Docker API access, external auto-updater or other containers are involved. It uses the same lightweight Python process already included in Recipe Importer.
+
+This capability **starts with the v1.4.0 Docker image**: older versions have no launcher/updater and therefore require **one normal pull and redeploy to bootstrap it**. Thereafter compatible Python/UI updates are installed inside the existing container. Every server GitHub Release is built after successful tests and Docker-image publication; its `recipe-importer-server-X.Y.Z.tar.gz` bundle and `.sha256` checksum are downloaded over HTTPS and checked before activation.
+
+**Important Docker limitation:** the updater does not claim to update the immutable Docker image. Releases that alter `requirements.txt`, the Dockerfile, Python/system dependencies, the launcher, or other underlying image requirements are intentionally **blocked by the in-app installer** and must be redeployed using an updated Docker image. The UI reports that incompatibility, rather than pretending a full container image can be replaced from inside an unprivileged container. All KitchenOwl settings, sessions, and downloaded Whisper models remain on persistent volumes across either update path.

@@ -18,8 +18,9 @@ import kitchenowl
 import media
 import recipes
 import settings_store
+import updater
 
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -162,6 +163,29 @@ def admin_settings(token: str = Depends(require_admin)):
 @app.post("/api/admin/test")
 async def admin_test(body: ConnectionCheck, token: str = Depends(require_admin)):
     return await settings_store.test_connection(body.kitchenowl_url, body.kitchenowl_llt)
+
+
+@app.get("/api/admin/updates/status")
+def update_status(token: str = Depends(require_admin)):
+    return {'installed': updater.installed(), 'operation': updater.state()}
+
+
+@app.post("/api/admin/updates/check")
+async def update_check(token: str = Depends(require_admin)):
+    try:
+        return await run_in_threadpool(updater.check)
+    except Exception as exc:
+        raise HTTPException(502, 'Cannot check GitHub Releases: ' + str(exc)[:180]) from exc
+
+
+@app.post("/api/admin/updates/install", status_code=202)
+def update_install(token: str = Depends(require_admin)):
+    return updater.install()
+
+
+@app.post("/api/admin/updates/rollback", status_code=202)
+def update_rollback(token: str = Depends(require_admin)):
+    return updater.rollback()
 
 
 @app.post("/api/admin/settings")
