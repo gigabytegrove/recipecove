@@ -18,7 +18,7 @@ import kitchenowl
 import media
 import recipes
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
