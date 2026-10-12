@@ -139,3 +139,11 @@ The **Administration → Updates** screen distinguishes running server code, emb
 ## KitchenOwl long-lived token diagnostics
 
 Forknook locally checks JWT formatting and a complete HMAC signature segment before contacting KitchenOwl. This is a formatting check, not verification of authenticity. Known KitchenOwl validation errors, including signature errors and numeric JWT subject compatibility, are shown without echoing the token. Copy the entire LLT from KitchenOwl and revoke any token exposed in chat or logs. Import is read-only and copy-first.
+
+## Expanded discovery (2.1.7)
+
+**Discover recipes** defaults to **All recipe sources** and searches multiple public recipe publishers plus TheMealDB and Wikibooks. Publisher searches use documented public WordPress REST search endpoints where offered; individual publisher availability, licensing, and result quality can vary. Search results are previews only, never automatically approved or published. Opening an online publisher result extracts the original site's structured recipe and photograph using the existing importer.
+
+**Optional Food.com community index**: Administration → Imports & feeds accepts a user-supplied `RAW_recipes.csv` or a ZIP containing it from the [Food.com Recipes and User Interactions dataset](https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions). Admin must confirm rights to use the dataset. No recipe dataset is bundled or silently downloaded. A streaming import builds `/data/discovery-foodcom.sqlite3` using SQLite FTS5, separate from family data, and can hold approximately 230,000 records. Expect several hundred MB of disk consumption; the dataset is not intended to load entirely in RAM. Search by recipe name or ingredients; click a result to preview and submit through the existing approval process. Imported community records usually do not include a photo; the normal recipe editor permits adding one.
+
+Catalog providers return partial results and identify unavailable external sites rather than presenting a false zero-result claim. No new container, database server, package dependency, platform integration, or subscription is required.
