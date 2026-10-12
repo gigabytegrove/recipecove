@@ -22,12 +22,13 @@ import kitchenowl
 import forknook
 import forknook_features
 import forknook_catalog
+import forknook_dataset
 import media
 import recipes
 import settings_store
 import updater
 
-VERSION = "2.1.6"
+VERSION = "2.1.7"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -358,6 +359,7 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
 app.include_router(forknook.router)
 app.include_router(forknook_features.router)
 app.include_router(forknook_catalog.router)
+app.include_router(forknook_dataset.router)
 
 @app.get('/api/v2/openapi.json',include_in_schema=False)
 def forknook_openapi():

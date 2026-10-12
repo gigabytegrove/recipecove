@@ -123,9 +123,9 @@ async function openShopping(id,{push=true}={}){if(push && location.pathname!==ur
 
 async function renderDiscover(){
  const entries=await api('/discovery/providers');
- const q=node('input',{type:'search',placeholder:'Chicken, lasagna, tomatoes, garlic…',maxLength:90});
+ const q=node('input',{type:'search',placeholder:'Try bourbon chicken, sesame chicken, garlic, rice…',maxLength:90});
  const provider=node('select');
- for(const item of entries)provider.add(node('option',{value:item.id,text:item.name}));
+ for(const item of entries)provider.add(node('option',{value:item.id,text:item.name+(item.id==='foodcom'?' ('+(item.available?(item.count||0).toLocaleString()+' recipes':'not installed')+')':'')}));
  const mode=node('select');mode.add(node('option',{value:'name',text:'Recipe name'}));mode.add(node('option',{value:'ingredient',text:'Ingredient'}));
  const results=node('div',{class:'discover-grid grid'}),information=node('p',{class:'small muted',text:'Search a recipe directory, preview the ingredients and directions, then review/edit before saving. Nothing is imported automatically.'});
  const search=button('Search recipes',async()=>{
@@ -135,11 +135,11 @@ async function renderDiscover(){
       const r=await api('/discovery/search?'+new URLSearchParams({provider:provider.value,mode:mode.value,q:q.value.trim()}));
       information.textContent=r.notice||'';
       results.replaceChildren();
-      if(!r.items.length)results.append(empty('No matching recipes found. Try a different name or ingredient.'));
+      if(!r.items.length)results.append(empty('No matches from the currently available sources. Try All recipe sources, a broader ingredient, or enable the optional Food.com library in Administration → Imports & feeds.'));
       for(const item of r.items){
         const picture=node('div',{class:'recipe-tile-photo'},node('span',{class:'recipe-placeholder',text:'🥗'}));
         if(item.image_url)setPicture(picture,item.image_url,item.title);
-        const tile=card(picture,node('div',{class:'recipe-tile-copy'},node('span',{class:'pill',text:provider.selectedOptions[0].textContent}),
+        const tile=card(picture,node('div',{class:'recipe-tile-copy'},node('span',{class:'pill',text:entries.find(e=>e.id===item.provider)?.name||item.provider}),
              node('h3',{text:item.title}),node('p',{class:'recipe-excerpt',text:item.description||'Preview available ingredients and directions.'})),
              node('footer',{},button('Preview & import',async()=>{
                 const draft=await api('/discovery/preview?'+new URLSearchParams({provider:item.provider,id:item.id}));
@@ -150,7 +150,7 @@ async function renderDiscover(){
    }finally{search.disabled=false}
  },'primary');
  q.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();search.click()}});
- const intro=card(node('h2',{text:'Search recipe directories'}),node('p',{class:'muted',text:'Find recipe ideas by dish name or ingredient across real public catalogs. Browse, review, and import a copy into your family collection.'}),
+ const intro=card(node('h2',{text:'Search thousands of recipes'}),node('p',{class:'muted',text:'Search multiple recipe websites and the optional Food.com community collection in one search. Browse results, review ingredients and directions, and submit your favorites to the family collection.'}),
      node('div',{class:'form-grid'},node('label',{},'Find recipes',q),node('label',{},'Recipe directory',provider),node('label',{},'Search by',mode)),
      node('div',{class:'toolbar'},search,button('Import from a website instead',()=>navigate('sources'))),information);
  content.replaceChildren(intro,results);
@@ -212,7 +212,37 @@ async function renderAdminImports(){
  const preview=button('Preview migration',async()=>{if(!household.value)throw Error('Choose a household');status.textContent='Fetching recipes for review…';const r=await api('/admin/kitchenowl/import',{method:'POST',data:payload(true)});status.textContent=`Found ${r.found} recipes, ${r.would_import} new, ${r.already_imported} previously copied, ${r.invalid} unsupported, ${r.unavailable||0} unavailable (IDs: ${(r.unavailable_ids||[]).join(', ')||'none'}). KitchenOwl was not modified.`},'primary');
  const importBtn=button('Copy recipes into Forknook',async()=>{if(!household.value)throw Error('Choose a household');if(!confirm('Copy recipes from this KitchenOwl household into Forknook? Your KitchenOwl data will be untouched.'))return;status.textContent='Copying recipes…';const r=await api('/admin/kitchenowl/import',{method:'POST',data:payload(false)});status.textContent=`Copied ${r.imported} recipe(s), ${r.already_imported} already present, ${r.invalid} unsupported, ${r.unavailable||0} unavailable (IDs: ${(r.unavailable_ids||[]).join(', ')||'none'}). KitchenOwl remains unchanged.`;announce('Migration complete')},'accent');
  container.append(card(node('h2',{text:'Import directly from KitchenOwl'}),node('p',{class:'muted',text:'Connect to a KitchenOwl instance, select a household, preview everything, then copy recipes. Existing KitchenOwl recipes are never changed or deleted.'}),node('div',{class:'form-grid'},node('label',{},'KitchenOwl server URL',url),node('label',{},'Long-lived API token',token),node('label',{},'Household',household)),node('div',{class:'toolbar'},connect,preview,importBtn),status));
- container.append(card(node('h2',{text:'Search recipe directories'}),node('p',{class:'muted',text:'Discover community recipes by name or ingredients in Wikibooks Cookbook and TheMealDB.'}),button('Open searchable recipe catalogs',()=>navigate('discover'),'primary')));
+ const catalogFile=node('input',{type:'file',accept:'.csv,.zip'});
+ const licensed=node('input',{type:'checkbox'}),dbProgress=node('p',{class:'muted small',role:'status',text:'Reading local community collection…'});
+ const upload=button('Install community recipe collection',async()=>{
+  if(!catalogFile.files.length)throw Error('Select RAW_recipes.csv or the ZIP containing it first.');
+  if(!licensed.checked)throw Error('Confirm that you have permission to use the dataset.');
+  if(!confirm('Build a separate, searchable Food.com community collection? This never modifies your family recipes.'))return;
+  const form=new FormData();form.append('file',catalogFile.files[0]);form.append('accept_license','true');
+  upload.disabled=true;dbProgress.textContent='Uploading dataset. Large CSV files can take several minutes…';
+  try{
+   const result=await api('/discovery/dataset/import',{method:'POST',form});
+   dbProgress.textContent=result.message||'Building searchable index…';announce('Dataset indexing started');
+  }finally{upload.disabled=false}
+ },'primary');
+ const updateDatasetStatus=async()=>{
+  if(model.page!=='admin-imports')return;
+  try{
+   const p=await api('/discovery/dataset/status');
+   dbProgress.textContent=(p.ready?p.count.toLocaleString()+' searchable Food.com recipes. ':'')+
+     (p.message||'')+(p.phase==='indexing'?' ('+(p.progress||0)+'%)':'');
+  }catch(e){dbProgress.textContent='Cannot read dataset status: '+e.message}
+ };
+ container.append(card(node('h2',{text:'Expanded recipe discovery'}),
+   node('p',{class:'muted',text:'Search Budget Bytes, Spend With Pennies, Skinnytaste, Wikibooks and TheMealDB together, plus an optional local Food.com database of roughly 230,000 recipes. Search is separate from family recipes; selected items are reviewed before saving.'}),
+   button('Search all recipe sources',()=>navigate('discover'),'primary')));
+ container.append(card(node('h2',{text:'Optional offline Food.com collection'}),
+   node('p',{class:'muted',text:'Download the Food.com Recipes and User Interactions dataset yourself from Kaggle and upload RAW_recipes.csv or its ZIP archive. Forknook streams the import into a separate SQLite search index within /data. No new container, paid service or API key is needed. Expect several hundred megabytes of storage.'}),
+   node('a',{href:'https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions',target:'_blank',rel:'noopener noreferrer',text:'Food.com community dataset (Kaggle)'}),
+   node('label',{},'Food.com RAW_recipes.csv or ZIP',catalogFile),
+   node('label',{class:'check-row'},licensed,'I have permission to use this dataset and understand its license/attribution requirements.'),
+   node('div',{class:'toolbar'},upload,button('Refresh import status',updateDatasetStatus)),dbProgress));
+ await updateDatasetStatus();
  const imports=node('div');await renderSources();
  while(content.firstChild)imports.append(content.firstChild);
  container.append(imports);
