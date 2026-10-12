@@ -95,8 +95,10 @@ async def search(provider:str=Query(...,max_length=30),mode:str=Query('name',max
           'This catalog uses TheMealDB. Its free key is intended for personal use and development; public/app-store deployments need a supporter key.'}
     if provider=='wikibooks':
         # MediaWiki prefix: search restricts to Cookbook articles, not arbitrary pages.
-        params={'action':'query','list':'search','format':'json','srsearch':term+' prefix:Cookbook:',
-                'srnamespace':'0','srlimit':'30','srprop':'snippet','utf8':'1'}
+        params={'action':'query','list':'search','format':'json',
+                'srsearch':('intitle:'+term if mode=='name' else term),
+                # Cookbook: is a custom MediaWiki namespace (102), not mainspace.
+                'srnamespace':'102','srlimit':'30','srprop':'snippet','utf8':'1'}
         data=await _get_json(WIKIBOOKS,params)
         rows=data.get('query',{}).get('search',[])
         if not isinstance(rows,list):raise HTTPException(502,'Unexpected Wikibooks search response')

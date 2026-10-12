@@ -228,7 +228,7 @@ def test_wikibooks_catalog_search_and_preview(family):
     async def mock_get(url,params):
         assert url=='https://en.wikibooks.org/w/api.php'
         if params.get('list')=='search':
-            assert 'prefix:Cookbook:' in params['srsearch']
+            assert params['srnamespace']=='102' and params['srsearch']=='potatoes'
             return {'query':{'search':[{'title':'Cookbook:Potato Soup','snippet':'Soup made with <span class="searchmatch">potatoes</span>'},
                                        {'title':'Main Page','snippet':'Not a recipe'}]}}
         return {'parse':{'text':{'*':'<h2>Ingredients</h2><ul><li>2 potatoes</li></ul><h2>Directions</h2><ol><li>Boil potatoes</li></ol>'}}}
