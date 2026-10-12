@@ -79,7 +79,7 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'2.1.3' in result['app.py']
+    assert result['app.py'] and b'2.1.4' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))
@@ -135,3 +135,59 @@ def test_launcher_only_runs_under_saved_release_directory(tmp_path,monkeypatch):
     (path/'web').mkdir()
     (path/'web'/'index.html').write_text('hello')
     assert launcher._location({'release':ident})==path
+
+
+def test_real_release_archive_includes_web_directory(patches,monkeypatch):
+    """Mirrors GNU tar: an ordinary web/ header must not fail verification."""
+    server,_,_=patches
+    release=updater._release()
+    buffer=io.BytesIO()
+    with tarfile.open(fileobj=buffer,mode='w:gz') as tar:
+        for path in server.glob('*.py'):
+            tar.add(path,arcname=path.name,recursive=False)
+        tar.add(server/'web',arcname='web')
+        for file in ('requirements.txt','Dockerfile'):
+            tar.add(server/file,arcname=file,recursive=False)
+        metadata=json.dumps({'version':release['version'],'requires_image':False}).encode()
+        entry=tarfile.TarInfo('update_release.json')
+        entry.size=len(metadata)
+        tar.addfile(entry,io.BytesIO(metadata))
+    tar_bytes=buffer.getvalue()
+    original=updater._https_get
+    def fake(url,size=None):
+        if url.endswith('.tar.gz'):
+            return tar_bytes
+        if url.endswith('.sha256'):
+            return hashlib.sha256(tar_bytes).hexdigest().encode()
+        return original(url,size)
+    monkeypatch.setattr(updater,'_https_get',fake)
+    result=updater._verified_files(release)
+    assert 'web/index.html' in result and 'web/forknook.js' in result
+    assert not any(key.endswith('/') for key in result)
+
+
+@pytest.mark.parametrize('malicious_name,kind',[
+    ('web/../app.py','file'),('/root/hijack','file'),
+    ('web/evil-link','symlink'),('other/','dir')])
+def test_release_rejects_unsafe_tar_entries(patches,monkeypatch,malicious_name,kind):
+    server,_,original_bundle=patches
+    release=updater._release()
+    src=io.BytesIO(original_bundle)
+    dest=io.BytesIO()
+    with tarfile.open(fileobj=src,mode='r:gz') as source, tarfile.open(fileobj=dest,mode='w:gz') as target:
+        for entry in source:
+            target.addfile(entry,source.extractfile(entry) if entry.isfile() else None)
+        marker=tarfile.TarInfo(malicious_name)
+        marker.type=tarfile.SYMTYPE if kind=='symlink' else tarfile.DIRTYPE if kind=='dir' else tarfile.REGTYPE
+        if kind=='symlink':
+            marker.linkname='app.py'
+        elif kind=='file':
+            marker.size=1
+        target.addfile(marker,io.BytesIO(b'x') if kind=='file' else None)
+    blob=dest.getvalue()
+    original=updater._https_get
+    monkeypatch.setattr(updater,'_https_get',lambda url,n=None:
+        blob if url.endswith('.tar.gz') else hashlib.sha256(blob).hexdigest().encode()
+        if url.endswith('.sha256') else original(url,n))
+    with pytest.raises(ValueError,match='Unsafe|unexpected|Unexpected'):
+        updater._verified_files(release)

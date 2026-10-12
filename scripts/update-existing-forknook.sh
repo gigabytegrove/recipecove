@@ -3,7 +3,9 @@
 # Does not deploy a second stack, modify Compose files, or remove user data.
 set -Eeuo pipefail
 IMAGE='ghcr.io/gigabytegrove/forknook:latest'
-EXPECTED='2.1.2'
+EXPECTED="${FORKNOOK_TARGET_VERSION:-2.1.4}"
+[[ "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid Forknook version" >&2; exit 1; }
+PINNED_IMAGE="ghcr.io/gigabytegrove/forknook:$EXPECTED"
 
 for executable in docker python3; do
   command -v "$executable" >/dev/null || { echo "ERROR: $executable is required" >&2; exit 1; }
@@ -77,8 +79,8 @@ PY
 )"
 if [[ -n "$BACKUP" ]]; then echo "Preserved in-app updater pointer at $BACKUP"; fi
 
-echo 'Pulling latest Forknook image…'
-if ! docker pull "$IMAGE"; then
+echo "Pulling pinned Forknook $EXPECTED image…"
+if ! docker pull "$PINNED_IMAGE"; then
   echo 'ERROR: Image pull failed. Your running service has not been recreated.' >&2
   if [[ -n "$BACKUP" ]]; then
     docker exec "$CID" python -c 'import shutil,sys;shutil.copyfile(sys.argv[1],"/data/updates/active.json")' "$BACKUP" || true
@@ -97,6 +99,9 @@ assert obj.get("version")==sys.argv[1],obj
 ' "$expect" >/dev/null 2>&1
 }
 
+# Compose still declares :latest. Point that local tag to the verified pinned
+# image; --pull never avoids jumping to a newer release during an update test.
+docker image tag "$PINNED_IMAGE" "$IMAGE"
 echo 'Recreating the existing Compose service (named volumes preserved)…'
 if docker compose "${args[@]}" up -d --no-deps --no-build --pull never --force-recreate "$SERVICE"; then
   NEW_CID="$(docker compose "${args[@]}" ps -q "$SERVICE")"

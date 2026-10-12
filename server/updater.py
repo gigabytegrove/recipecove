@@ -182,14 +182,30 @@ def _verified_files(release: dict) -> dict[str, bytes]:
     entries: dict[str, bytes] = {}
     with tarfile.open(fileobj=io.BytesIO(blob), mode='r:gz') as tar:
         for member in tar.getmembers():
-            if not member.isfile() or not _ALLOWED.fullmatch(member.name):
-                raise ValueError('Unsafe or unexpected file in release package')
-            if member.size > 1024 * 1024 or member.name in entries or len(entries) >= 60:
+            # GNU tar emits a harmless web/ directory header when publishing.
+            # Never extract untrusted members directly, and reject links.
+            name = member.name
+            parts = name.rstrip('/').split('/')
+            if (not name or name.startswith('/') or '\\' in name or
+                    any(part in ('', '.', '..') for part in parts)):
+                raise ValueError(f'Unsafe release path: {name[:100]}')
+            if member.isdir():
+                if parts[0] != 'web' or len(parts) > 10 or not all(
+                    re.fullmatch(r'[A-Za-z0-9_.-]+', part) for part in parts[1:]
+                ):
+                    raise ValueError(f'Unexpected directory in release: {name[:100]}')
+                continue
+            if not member.isfile() or not _ALLOWED.fullmatch(name):
+                raise ValueError(f'Unsafe or unexpected file in release package: {name[:100]}')
+            if member.size > 1024 * 1024 or name in entries or len(entries) >= 60:
                 raise ValueError('Update package contains oversized or duplicate files')
             stream = tar.extractfile(member)
             if stream is None:
                 raise ValueError('Invalid update package')
-            entries[member.name] = stream.read(1024 * 1024 + 1)
+            content = stream.read(1024 * 1024 + 1)
+            if len(content) != member.size:
+                raise ValueError('Update package contains an invalid file size')
+            entries[name] = content
     needed = {'app.py', 'recipes.py', 'media.py', 'kitchenowl.py', 'settings_store.py',
               'transcribe_worker.py', 'updater.py', 'forknook.py', 'web/index.html',
               'web/forknook.html', 'web/forknook.css', 'web/forknook.js',
