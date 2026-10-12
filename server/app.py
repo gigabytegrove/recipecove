@@ -1,4 +1,4 @@
-"""Recipe Importer: one-process recipe processing server and KitchenOwl integration."""
+"""Forknook: standalone family RMS with preserved legacy importer."""
 from __future__ import annotations
 
 import asyncio
@@ -15,12 +15,13 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import kitchenowl
+import forknook
 import media
 import recipes
 import settings_store
 import updater
 
-VERSION = "1.4.0"
+VERSION = "2.0.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -28,10 +29,11 @@ _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     kitchenowl.initialize()
+    forknook.initialize()
     yield
 
 
-app = FastAPI(title="Recipe Importer", version=VERSION, lifespan=lifespan,
+app = FastAPI(title="Forknook", version=VERSION, lifespan=lifespan,
               docs_url=None, redoc_url=None, openapi_url=None)
 
 
@@ -112,6 +114,8 @@ def health():
 
 @app.get("/")
 def home():
+    if forknook.configured() or not settings_store.configured():
+        return FileResponse(DATA / "web" / "forknook.html",media_type="text/html",headers=_FORK_HEADERS)
     return FileResponse(DATA / "web" / "index.html", media_type="text/html", headers={
         "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
         "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"})
@@ -325,3 +329,36 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
         info = await run_in_threadpool(media.run_exclusive, media.process_local_file, file)
         return await _complete_media(info, "video")
     finally: await file.close()
+
+
+# Native Forknook RMS lives alongside the original import endpoints so existing
+# deployments and mobile clients continue to function during migration.
+app.include_router(forknook.router)
+
+_FORK_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+}
+
+@app.get("/app")
+@app.get("/app/")
+def forknook_pwa():
+    return FileResponse(DATA / "web" / "forknook.html",media_type="text/html",headers=_FORK_HEADERS)
+
+@app.get("/app/{asset_name}")
+def forknook_asset(asset_name:str):
+    names={"forknook.css":"text/css","forknook.js":"text/javascript",
+           "sw.js":"text/javascript", "manifest.json":"application/manifest+json",
+           "icon-192.png":"image/png","icon-512.png":"image/png",
+           "forknook-logo.png":"image/png"}
+    if asset_name not in names:raise HTTPException(404,"Not found")
+    return FileResponse(DATA / "web" / asset_name,media_type=names[asset_name],
+                        headers={"Cache-Control":"no-cache" if asset_name=="sw.js" else "public, max-age=300",
+                                 "X-Content-Type-Options":"nosniff"})
+
+@app.get("/legacy")
+def legacy_importer():
+    return FileResponse(DATA / "web" / "index.html",media_type="text/html",headers=_FORK_HEADERS)

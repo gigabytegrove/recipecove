@@ -55,7 +55,7 @@ def test_failed_worker_reports_failure_without_retaining_model():
 def test_compose_resource_guards_and_disk_tmp():
     import yaml
     config = yaml.safe_load((Path(__file__).resolve().parents[1] / "compose.yaml").read_text())
-    app = config["services"]["recipe-importer"]
+    app = config["services"]["forknook"]
     assert app["cpus"] <= 1.0
     assert app["mem_limit"] == "1536m"
     assert app["memswap_limit"] == app["mem_limit"]

@@ -58,7 +58,7 @@ def _read_pointer() -> dict:
     try:
         return json.loads(ACTIVE.read_text())
     except FileNotFoundError:
-        return {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '1.4.0')}
+        return {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '2.0.0')}
 
 
 def _ready(process: subprocess.Popen, expected: str, timeout: float = 60) -> bool:
@@ -99,11 +99,11 @@ def main():
             path = _location(pointer)
         except RuntimeError as exc:
             LOG.error('Invalid installed release: %s', exc)
-            pointer = {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '1.4.0')}
+            pointer = {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '2.0.0')}
             _write(ACTIVE, pointer)
             path = BASE
-        expected = pointer.get('version') or os.environ.get('RI_IMAGE_VERSION', '1.4.0')
-        LOG.info('Starting Recipe Importer %s from %s', expected, path)
+        expected = pointer.get('version') or os.environ.get('RI_IMAGE_VERSION', '2.0.0')
+        LOG.info('Starting Forknook %s from %s', expected, path)
         env = dict(os.environ)
         env['PYTHONPATH'] = str(path)
         proc = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app:app', '--host', '0.0.0.0',
@@ -117,14 +117,14 @@ def main():
             if pointer.get('release'):
                 recovery = pointer.get('previous')
                 if not isinstance(recovery, dict):
-                    recovery = {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '1.4.0')}
+                    recovery = {'release': None, 'version': os.environ.get('RI_IMAGE_VERSION', '2.0.0')}
                 _write(ACTIVE, recovery)
                 _status('rolled_back', 100, f'Update {expected} failed health check; previous version restored')
                 continue
             _status('failed', 0, 'The base Docker image failed to start. Check container logs.')
             return 1
         if not first or STATUS.exists():
-            _status('ready', 100, f'Recipe Importer {expected} running', version=expected)
+            _status('ready', 100, f'Forknook {expected} running', version=expected)
         first = False
         while not EXITING:
             if proc.poll() is not None:
@@ -132,7 +132,7 @@ def main():
                 return proc.returncode or 1
             if REQUEST.exists():
                 REQUEST.unlink(missing_ok=True)
-                _status('restarting', 95, 'Restarting Recipe Importer; saved configuration is preserved')
+                _status('restarting', 95, 'Restarting Forknook; saved configuration is preserved')
                 _stop(proc)
                 break
             time.sleep(.4)

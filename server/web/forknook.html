@@ -1,0 +1,60 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#183c2b"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Forknook">
+<meta name="description" content="Your family's own kitchen: recipes, meal plans and shopping lists">
+<link rel="manifest" href="/app/manifest.json"><link rel="apple-touch-icon" href="/app/icon-192.png">
+<link rel="icon" href="/app/icon-192.png"><link rel="stylesheet" href="/app/forknook.css">
+<title>Forknook · Family kitchen</title></head><body>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<section id="auth" class="auth-shell">
+  <div class="auth-card"><img class="auth-brand" src="/app/forknook-logo.png" alt="Forknook">
+    <p class="muted centered">Your family's recipes, made your way.</p>
+    <h1 id="auth-title">Welcome</h1><p id="auth-hint" class="muted"></p>
+    <form id="auth-form" class="stack">
+      <label id="code-field" hidden>First-run setup code<input id="setup-code" type="password" autocomplete="off"></label>
+      <label id="display-field" hidden>Your name<input id="display-name" maxlength="100" autocomplete="name"></label>
+      <label>Username<input id="username" autocomplete="username" required minlength="3"></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" minlength="12" required></label>
+      <button id="auth-submit" class="primary" type="submit">Continue</button>
+    </form><p class="small muted">For iPad: open in Safari → Share → Add to Home Screen.</p>
+  </div>
+</section>
+<div id="shell" hidden>
+  <aside class="sidebar"><div class="sidebar-brand"><img src="/app/icon-192.png" alt=""/><div><strong>Forknook</strong><small>Our family kitchen</small></div></div>
+    <nav id="main-nav" aria-label="Primary navigation">
+      <button data-page="recipes" class="active">📖 <span>Recipes</span></button>
+      <button data-page="plan">🗓️ <span>Meal planning</span></button>
+      <button data-page="shopping">🛒 <span>Shopping lists</span></button>
+      <button data-page="sources">📥 <span>Imports & feeds</span></button>
+      <button data-page="categories">🏷️ <span>Categories</span></button>
+      <button data-page="admin" id="admin-nav" hidden>⚙️ <span>Administration</span></button>
+    </nav><div class="sidebar-bottom"><span id="current-user"></span><button id="logout" class="secondary">Sign out</button></div>
+  </aside>
+  <main class="main"><header class="topbar"><div><p class="eyebrow">OUR FAMILY KITCHEN</p><h1 id="page-title">Recipes</h1></div><button id="mobile-logout" class="secondary mobile-only">Sign out</button></header>
+    <div id="content" class="content" tabindex="-1"></div>
+  </main>
+  <nav class="mobile-nav" aria-label="Mobile navigation">
+    <button data-page="recipes">📖<span>Recipes</span></button><button data-page="plan">🗓️<span>Plan</span></button>
+    <button data-page="shopping">🛒<span>Shopping</span></button><button data-page="sources">📥<span>Import</span></button>
+    <button data-page="categories">🏷️<span>More</span></button>
+  </nav>
+</div>
+<dialog id="editor"><form method="dialog" id="recipe-form" class="dialog-form">
+  <header class="dialog-head"><h2 id="editor-title">Recipe</h2><button type="button" id="close-editor" class="secondary">Close</button></header>
+  <div class="form-grid"><label class="full">Recipe name<input name="title" required maxlength="300"></label>
+    <label class="full">Description<textarea name="description" rows="2"></textarea></label>
+    <label>Category<select name="category_id"><option value="">Uncategorized</option></select></label>
+    <label>Servings<input name="servings" placeholder="4 servings"></label>
+    <label>Prep (minutes)<input name="prep_time" type="number" min="0"></label>
+    <label>Cook (minutes)<input name="cook_time" type="number" min="0"></label>
+    <label class="full">Ingredients (one per line)<textarea name="ingredients" rows="7" placeholder="2 cups flour\n1 tsp salt"></textarea></label>
+    <label class="full">Directions (one step per line)<textarea name="instructions" rows="7" placeholder="Mix everything\nBake at 350°F"></textarea></label>
+    <label class="full">Tags (comma separated)<input name="tags" placeholder="family favorite, dinner"></label>
+    <label class="full">Source URL<input name="source_url" type="url" placeholder="https://..."></label>
+    <label class="full">Notes<textarea name="notes" rows="3"></textarea></label>
+    <details class="full" id="extraction-details"><summary>Captured source text / transcription</summary><pre id="editor-evidence"></pre></details>
+    <div id="manual-warning" class="full warning" hidden>This extraction may have missed ingredients or steps. Review before saving.</div>
+  </div><div class="dialog-actions"><button class="primary" type="submit">Save recipe</button></div></form></dialog>
+<script defer src="/app/forknook.js"></script>
+</body></html>
