@@ -73,7 +73,7 @@ git pull --ff-only origin main
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\android\build-apk.ps1"
 ```
 
-Expected APK: `android\app\build\outputs\versioned\Forknook-v2.0.0-debug.apk`. The script builds/tests, validates the package/signature, and writes `SHA256SUMS.txt`. This is sideloadable debug-signed software, not a Play Store-signed release. The user selects the Forknook server URL on first launch; Android shares from websites and media open in the Forknook interface.
+Expected APK: `android\app\build\outputs\versioned\Forknook-v2.0.0-debug.apk`. The Windows build uses the committed Gradle wrapper, runs unit tests, copies the debug build into this versioned folder, checks Android package/version and signature, and writes SHA256SUMS.txt; it no longer produces the legacy recipe-importer filename. The script builds/tests, validates the package/signature, and writes `SHA256SUMS.txt`. This is sideloadable debug-signed software, not a Play Store-signed release. The user selects the Forknook server URL on first launch; Android shares from websites and media open in the Forknook interface.
 
 ## KitchenOwl migration — copy first, verify, then decide
 
