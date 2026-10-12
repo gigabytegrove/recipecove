@@ -84,28 +84,15 @@ No KitchenOwl URL, LLT or OpenAI API key belongs in Compose or `.env`. Those are
 
 A one-time setup code is required to claim a new installation; retrieve it from the container logs. It is a secret and must not be published. Afterwards, an administrator password protects edits to server settings. KitchenOwl logins still retain their own household permissions, and existing Android API routes remain supported. Use HTTPS through a reverse proxy if remotely accessible: login passwords, LLT setup, and device session tokens should never travel over the public Internet using HTTP. An HTTP LAN address is supported for private deployments. Container resources remain capped in Compose.
 
-### Android APK
+### Android APK — local build (Calden workflow)
 
-Source is in `android/`. Android Studio with Android SDK Platform 35, Android Gradle Plugin 8.9.2 and JDK 17 is required to build locally.
+Recipe Importer uses the same **local Git checkout → committed Gradle wrapper → test/build → versioned APK → signature/SHA-256 validation** workflow as Calden. No ZIP-based source bootstrap, GitHub Actions, or desktop copy is needed for local builds.
 
-Windows PowerShell:
+On Windows, clone `https://github.com/gigabytegrove/recipe-importer.git` once to `$HOME\\recipe-importer`. On later builds, use `git pull --ff-only origin main` in that checkout. From its `android` directory, run `.\\build-apk.ps1` or `.\\gradlew.bat --no-daemon --console=plain clean testDebugUnitTest assembleDebug`.
 
-```powershell
-cd android
-powershell -ExecutionPolicy Bypass -File .\build-apk.ps1
-```
+The Gradle build automatically creates `android/app/build/outputs/versioned/Recipe-Importer-v1.1.0-debug.apk` (version derived from `app/build.gradle`, not hardcoded in the build task). `build-apk.ps1` also checks the APK's package, version, signature, and generates `SHA256SUMS.txt` in the same versioned folder. Requires Android SDK Platform 35 and a JDK (Android Studio's bundled JBR works). The APK is debug-signed for personal sideloading, not a Play Store release.
 
-Linux/macOS (with SDK environment configured):
-
-```bash
-bash android/build-apk.sh
-```
-
-Alternatively, from GitHub **Actions → Build Recipe Importer APK → Run workflow**, download the uploaded `recipe-importer-1.1.0-debug` artifact after it succeeds. The APK is for personal sideloading (debug-signed), not for publishing on Google Play. Installing it requires the Android **Install unknown apps** permission for your selected installer.
-
-On the phone: launch Recipe Importer → Settings → enter the URL of **your new Recipe Importer server** → sign in with the KitchenOwl username/password → pick the household. Then share an Instagram Reel, URL, image or video directly to Recipe Importer. Review and edit the preview, check the duplicate warning, and confirm Add to KitchenOwl.
-
-The APK compilation and live Instagram fetching are not verifiable in this source environment; CI and your actual KitchenOwl host will confirm those. Test a regular recipe website and a short public Reel before treating the new service as a complete replacement for your installed KO-Pellet.
+On the phone: launch Recipe Importer → Settings → enter **your Recipe Importer server URL** → sign in with your KitchenOwl username/password → pick a household. Then share a supported recipe URL, Instagram/Facebook video, screenshot, or local video to Recipe Importer. Review/edit and confirm saving.
 
 ## Architecture
 
