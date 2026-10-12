@@ -2,7 +2,7 @@
 
 Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
 
-**Release: 2.1.3 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.1.4 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -90,7 +90,7 @@ pull_policy: always
 
 Without `pull_policy: always`, Dokploy may recreate a cached old image instead of downloading the latest digest. The Updates page checks this setting before it permits a deployment. The Dokploy request explicitly uses `freshVolumes: false`; your `/data` volume must remain mounted. The screen displays the running version, image version and updater state separately.
 
-Existing Forknook images before 2.1.3 cannot operate the new Dokploy integration because that code is not in the running container. **One initial upgrade to 2.1.3 through Dokploy is necessary**; after that, updates can be initiated from the Forknook UI. This avoids pretending an unprivileged container can replace its own Docker image.
+Existing Forknook images before 2.1.4 cannot operate the new Dokploy integration because that code is not in the running container. **One initial upgrade to 2.1.4 through Dokploy is necessary**; after that, updates can be initiated from the Forknook UI. This avoids pretending an unprivileged container can replace its own Docker image.
 
 If GitHub does not publish a code-only Release because the repository's Actions token cannot create Releases, the Updates screen still checks the verified versioned GHCR image directly and can initiate a Dokploy image update. Release publication permissions must be repaired separately for the code-only release path.
 
