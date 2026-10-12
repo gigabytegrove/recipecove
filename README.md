@@ -2,7 +2,7 @@
 
 Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
 
-**Release: 2.1.0 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.1.1 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 

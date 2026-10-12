@@ -276,6 +276,10 @@ async def ko_get(client:httpx.AsyncClient,origin:str,token:str,path:str):
     # redirects, keep tokens in request headers, and limit response bytes.
     try:
         async with client.stream('GET',origin+path,headers={'Authorization':'Bearer '+token,'Accept':'application/json'}) as r:
+            if r.status_code==404 and re.fullmatch(r'/api/recipe/\d+',path):
+                # A recipe can disappear between listing and retrieval.
+                # Report it without aborting all the other recipes.
+                return None
             if r.status_code!=200:
                 raise HTTPException(502,f'KitchenOwl API returned HTTP {r.status_code} for {path.split("/")[-1] or "households"}')
             data=bytearray()
@@ -364,12 +368,17 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
         if isinstance(data,dict):data=data.get('results',data.get('recipes',[]))
         if not isinstance(data,list):raise HTTPException(502,'KitchenOwl did not return a recipe list')
         if len(data)>base.MAX_IMPORTED_RECIPES:raise HTTPException(422,'More than 1000 recipes; migrate in batches')
-        items=[];invalid=0
+        items=[];invalid=0;unavailable_ids=[]
         for summary in data:
             if not isinstance(summary,dict):invalid+=1;continue
             item_id=summary.get('id')
             if not isinstance(item_id,int) or item_id<1:invalid+=1;continue
-            detail=await ko_get(client,origin,body.token,f'/api/household/{body.household_id}/recipe/{item_id}')
+            # KitchenOwl lists a household's recipes here, but its DETAIL
+            # endpoint lives at /api/recipe/{id} (no household in path).
+            detail=await ko_get(client,origin,body.token,f'/api/recipe/{item_id}')
+            if detail is None:
+                unavailable_ids.append(item_id)
+                continue
             if not isinstance(detail,dict):invalid+=1;continue
             try:
                 candidate=_ko_recipe(detail)
@@ -410,12 +419,14 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
             else:new.append((ref,item))
         if body.dry_run:
             return {'dry_run':True,'found':len(data),'valid':len(items),'invalid':invalid,
-                    'would_import':len(new),'already_imported':skipped,'source_unchanged':True}
+                    'would_import':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                    'unavailable_ids':unavailable_ids,'source_unchanged':True}
         now=time.time()
         for ref,item in new:
             db.execute('''INSERT INTO recipes(title,data,created_by,created_at,updated_at,external_ref)
                  VALUES(?,?,?,?,?,?)''',(item.title,item.model_dump_json(),who['id'],now,now,ref))
         db.execute('INSERT INTO migration_runs(source,attempted,imported,skipped,created_at) VALUES (?,?,?,?,?)',
-                   ('kitchenowl:'+source_id+':'+str(body.household_id),len(items),len(new),skipped+invalid,time.time()))
+                   ('kitchenowl:'+source_id+':'+str(body.household_id),len(items),len(new),skipped+invalid+len(unavailable_ids),time.time()))
         return {'dry_run':False,'found':len(data),'valid':len(items),'invalid':invalid,
-                'imported':len(new),'already_imported':skipped,'source_unchanged':True}
+                'imported':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                'unavailable_ids':unavailable_ids,'source_unchanged':True}

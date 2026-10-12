@@ -105,7 +105,7 @@ def test_kitchenowl_read_only_migration_dry_run_idempotent(family):
         assert token=='t'*20
         if path=='/api/household':return [{'id':7,'name':'Home'}]
         if path=='/api/household/7/recipe':return [{'id':12,'name':'Old Soup'}]
-        if path=='/api/household/7/recipe/12':return {'id':12,'name':'Old Soup','items':{'1 cup water':None},'instructions':['Boil']}
+        if path=='/api/recipe/12':return {'id':12,'name':'Old Soup','items':{'1 cup water':None},'instructions':['Boil']}
         raise AssertionError('Unexpected KitchenOwl path: '+path)
     credentials={'url':'http://192.168.3.12:8080','token':'t'*20,'household_id':7}
     with patch.object(ext,'ko_get',side_effect=ko_get):
@@ -122,7 +122,8 @@ def test_kitchenowl_read_only_migration_dry_run_idempotent(family):
         assert again.json()['imported']==0 and again.json()['already_imported']==1
         assert len(c.get('/api/v2/recipes',headers=admin).json())==1
         assert 'token' not in str(c.get('/api/v2/admin/export',headers=admin).json())
-    assert all(p.startswith('/api/household') for p in paths)
+    assert '/api/recipe/12' in paths
+    assert all(p.startswith('/api/household') or p.startswith('/api/recipe/') for p in paths)
     assert c.post('/api/v2/admin/kitchenowl/import',headers=r['approver'],json=credentials).status_code==403
     assert c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={'url':'http://127.0.0.1','token':'t'*20,'household_id':1}).status_code==422
 
@@ -146,3 +147,36 @@ def test_real_kitchenowl_markdown_roundtrip():
     assert restored.total_time==55 and restored.prep_time==15 and restored.cook_time==40
     assert restored.source_url==original['source_url']
     assert restored.image_url==original['image_url']
+
+
+def test_kitchenowl_detail_url_and_missing_recipe_dont_cancel_other_imports(family):
+    import httpx
+    c,admin,_=family
+    paths=[]
+    def respond(request):
+        paths.append(request.url.path)
+        if request.headers.get('Authorization') != 'Bearer '+('t'*20):
+            return httpx.Response(401)
+        if request.url.path=='/api/household/7/recipe':
+            return httpx.Response(200,json=[{'id':14,'name':'Deleted recipe'},{'id':15,'name':'Good soup'}])
+        if request.url.path=='/api/recipe/14':
+            return httpx.Response(404)
+        if request.url.path=='/api/recipe/15':
+            return httpx.Response(200,json={'id':15,'name':'Good soup','items':['1 cup broth'],'description':'Heat broth'})
+        return httpx.Response(404)
+    original=httpx.AsyncClient
+    def client_factory(*args,**kwargs):
+        return original(*args,transport=httpx.MockTransport(respond),**kwargs)
+    body={'url':'http://192.168.3.12:8080','token':'t'*20,'household_id':7}
+    with patch.object(ext.httpx,'AsyncClient',side_effect=client_factory):
+        dry=c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={**body,'dry_run':True})
+        assert dry.status_code==200,dry.text
+        assert dry.json()['found']==2 and dry.json()['would_import']==1
+        assert dry.json()['unavailable']==1 and dry.json()['unavailable_ids']==[14]
+        assert not c.get('/api/v2/recipes',headers=admin).json()
+        live=c.post('/api/v2/admin/kitchenowl/import',headers=admin,json={**body,'dry_run':False})
+        assert live.status_code==200,live.text
+        assert live.json()['imported']==1 and live.json()['unavailable_ids']==[14]
+        assert c.get('/api/v2/recipes',headers=admin).json()[0]['title']=='Good soup'
+    assert '/api/recipe/14' in paths and '/api/recipe/15' in paths
+    assert '/api/household/7/recipe/14' not in paths

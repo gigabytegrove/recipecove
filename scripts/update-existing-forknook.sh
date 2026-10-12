@@ -3,7 +3,7 @@
 # Does not deploy a second stack, modify Compose files, or remove user data.
 set -Eeuo pipefail
 IMAGE='ghcr.io/gigabytegrove/forknook:latest'
-EXPECTED='2.1.0'
+EXPECTED='2.1.1'
 
 for executable in docker python3; do
   command -v "$executable" >/dev/null || { echo "ERROR: $executable is required" >&2; exit 1; }
