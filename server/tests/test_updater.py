@@ -18,7 +18,7 @@ import launcher
 import updater
 
 
-def make_release(server: Path, version: str = '1.4.1', change_dep=False):
+def make_release(server: Path, version: str = '2.0.1', change_dep=False):
     files = {}
     for path in server.glob('*.py'):
         files[path.name] = path.read_bytes()
@@ -27,7 +27,7 @@ def make_release(server: Path, version: str = '1.4.1', change_dep=False):
             files[path.relative_to(server).as_posix()] = path.read_bytes()
     for name in ('requirements.txt','Dockerfile','update_release.json'):
         files[name] = (server/name).read_bytes()
-    files['app.py'] = files['app.py'].replace(b'VERSION = "1.4.0"', b'VERSION = "'+version.encode()+b'"')
+    files['app.py'] = files['app.py'].replace(b'VERSION = "2.0.0"', b'VERSION = "'+version.encode()+b'"')
     files['update_release.json'] = json.dumps({'version':version}).encode()
     if change_dep:
         files['requirements.txt'] += b'\nextra-package==1.0\n'
@@ -39,10 +39,10 @@ def make_release(server: Path, version: str = '1.4.1', change_dep=False):
             tf.addfile(info, io.BytesIO(content))
     blob = bundle.getvalue()
     tag='v'+version
-    origin='https://github.com/gigabytegrove/recipe-importer/releases/download/'+tag+'/'
+    origin='https://github.com/gigabytegrove/forknook/releases/download/'+tag+'/'
     desc={'tag_name':tag,'html_url':origin,'assets':[
-        {'name':f'recipe-importer-server-{version}.tar.gz','browser_download_url':origin+f'recipe-importer-server-{version}.tar.gz'},
-        {'name':f'recipe-importer-server-{version}.sha256','browser_download_url':origin+f'recipe-importer-server-{version}.sha256'},
+        {'name':f'forknook-server-{version}.tar.gz','browser_download_url':origin+f'forknook-server-{version}.tar.gz'},
+        {'name':f'forknook-server-{version}.sha256','browser_download_url':origin+f'forknook-server-{version}.sha256'},
     ]}
     return desc,blob
 
@@ -55,7 +55,7 @@ def patches(tmp_path,monkeypatch):
     monkeypatch.setattr(updater,'ACTIVE',updater.DATA/'active.json')
     monkeypatch.setattr(updater,'STATUS',updater.DATA/'status.json')
     monkeypatch.setattr(updater,'REQUEST',updater.DATA/'restart.request')
-    monkeypatch.setattr(updater,'_IMAGE_VERSION','1.4.0')
+    monkeypatch.setattr(updater,'_IMAGE_VERSION','2.0.0')
     updater.DATA.mkdir(parents=True)
     release,blob=make_release(server)
     def read(url,maxsize=None):
@@ -69,8 +69,8 @@ def patches(tmp_path,monkeypatch):
 
 def test_check_release(patches):
     found=updater.check()
-    assert found['available'] and found['latest_version']=='1.4.1'
-    assert found['current_version']=='1.4.0'
+    assert found['available'] and found['latest_version']=='2.0.1'
+    assert found['current_version']=='2.0.0'
     assert 'bundle' not in found
 
 
@@ -78,7 +78,7 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'1.4.1' in result['app.py']
+    assert result['app.py'] and b'2.0.1' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))
@@ -100,13 +100,13 @@ def test_install_switch_and_manual_rollback(patches):
     status=updater.state()
     assert status['phase']=='restarting',status
     pointer=updater.installed()
-    assert pointer['version']=='1.4.1'
-    assert pointer['previous']['version']=='1.4.0'
+    assert pointer['version']=='2.0.1'
+    assert pointer['previous']['version']=='2.0.0'
     assert (updater.DATA/'releases'/pointer['release']/'app.py').is_file()
     assert updater.REQUEST.exists()
     updater.REQUEST.unlink()
     assert updater.rollback()['restarting']
-    assert updater.installed()['version']=='1.4.0'
+    assert updater.installed()['version']=='2.0.0'
     assert updater.REQUEST.exists()
 
 

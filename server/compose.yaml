@@ -1,7 +1,7 @@
 services:
-  recipe-importer:
+  forknook:
     build: .
-    container_name: recipe-importer
+    container_name: forknook
     restart: unless-stopped
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
@@ -14,9 +14,9 @@ services:
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8999}:8999"
     volumes:
-      - recipe-importer-data:/data
+      - forknook-data:/data
       - whisper-models:/models
-      - recipe-importer-temp:/tmp
+      - forknook-temp:/tmp
       # Optional authorized Instagram cookie export:
       # - ./instagram_cookies.txt:/run/secrets/instagram_cookies.txt:ro
     read_only: true
@@ -29,6 +29,6 @@ services:
     mem_limit: 1536m
     memswap_limit: 1536m
 volumes:
-  recipe-importer-data:
+  forknook-data:
   whisper-models:
-  recipe-importer-temp:
+  forknook-temp:

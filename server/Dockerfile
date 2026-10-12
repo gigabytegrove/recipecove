@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-ARG RI_VERSION=1.4.0
+ARG RI_VERSION=2.0.0
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HOME=/models DATA_DIR=/data RI_IMAGE_VERSION=${RI_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-eng ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

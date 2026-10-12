@@ -24,14 +24,14 @@ from fastapi import HTTPException
 
 DATA = Path(os.environ.get('DATA_DIR', '/data')) / 'updates'
 BASE = Path('/app')
-REPO = 'gigabytegrove/recipe-importer'
+REPO = 'gigabytegrove/forknook'
 API = f'https://api.github.com/repos/{REPO}/releases/latest'
 ACTIVE = DATA / 'active.json'
 STATUS = DATA / 'status.json'
 REQUEST = DATA / 'restart.request'
-_IMAGE_VERSION = os.environ.get('RI_IMAGE_VERSION', '1.4.0')
+_IMAGE_VERSION = os.environ.get('RI_IMAGE_VERSION', '2.0.0')
 _LOCK = threading.Lock()
-_MAX_PACKAGE = 6 * 1024 * 1024
+_MAX_PACKAGE = 8 * 1024 * 1024
 _ALLOWED = re.compile(r'^(?:[a-z_][a-z0-9_]*\.py|web/[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)*|requirements\.txt|Dockerfile|update_release\.json)$')
 
 
@@ -69,7 +69,7 @@ def _semver(value: str) -> tuple[int, int, int]:
 
 
 def _https_get(url: str, size: int = _MAX_PACKAGE) -> bytes:
-    req = urllib.request.Request(url, headers={'User-Agent': 'RecipeImporterUpdater/1.4', 'Accept': 'application/vnd.github+json'})
+    req = urllib.request.Request(url, headers={'User-Agent': 'ForknookUpdater/2.0', 'Accept': 'application/vnd.github+json'})
     with urllib.request.urlopen(req, timeout=40) as response:
         # GitHub release asset URLs redirect to GitHub's asset CDN.
         result = response.read(size + 1)
@@ -83,7 +83,7 @@ def _release() -> dict:
     version = info.get('tag_name', '')
     _semver(version)
     assets = info.get('assets', [])
-    prefix = f'recipe-importer-server-{version.lstrip("v")}'
+    prefix = f'forknook-server-{version.lstrip("v")}'
     files = {asset.get('name'): asset.get('browser_download_url') for asset in assets if isinstance(asset, dict)}
     bundle = files.get(prefix + '.tar.gz')
     checksum = files.get(prefix + '.sha256')
@@ -123,14 +123,17 @@ def _verified_files(release: dict) -> dict[str, bytes]:
         for member in tar.getmembers():
             if not member.isfile() or not _ALLOWED.fullmatch(member.name):
                 raise ValueError('Unsafe or unexpected file in release package')
-            if member.size > 1024 * 1024 or member.name in entries or len(entries) >= 40:
+            if member.size > 1024 * 1024 or member.name in entries or len(entries) >= 60:
                 raise ValueError('Update package contains oversized or duplicate files')
             stream = tar.extractfile(member)
             if stream is None:
                 raise ValueError('Invalid update package')
             entries[member.name] = stream.read(1024 * 1024 + 1)
     needed = {'app.py', 'recipes.py', 'media.py', 'kitchenowl.py', 'settings_store.py',
-              'transcribe_worker.py', 'updater.py', 'web/index.html',
+              'transcribe_worker.py', 'updater.py', 'forknook.py', 'web/index.html',
+              'web/forknook.html', 'web/forknook.css', 'web/forknook.js',
+              'web/manifest.json', 'web/sw.js', 'web/icon-192.png',
+              'web/icon-512.png', 'web/forknook-logo.png',
               'requirements.txt', 'Dockerfile', 'launcher.py', 'update_release.json'}
     if not needed.issubset(entries):
         raise ValueError('Incomplete server update bundle')
