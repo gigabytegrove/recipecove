@@ -2,7 +2,7 @@
 
 Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
 
-**Release: 2.1.5 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.1.6 · test candidate.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -141,4 +141,8 @@ The **Administration → Updates** screen distinguishes running server code, emb
 
 ### In-app update verification from 2.1.4
 
-First install the pinned 2.1.4 Docker image. Then open Administration → Updates, check for v2.1.5 and choose the compatible server/UI update. The checksum-verified code is staged under /data/updates and Forknook requests a supervised restart with rollback on failed health check. Do not deploy the 2.1.5 Docker image before testing this route.
+First install the pinned 2.1.4 Docker image. Then open Administration → Updates, check for v2.1.6 and choose the compatible server/UI update. The checksum-verified code is staged under /data/updates and Forknook requests a supervised restart with rollback on failed health check. Do not deploy the 2.1.6 Docker image before testing this route.
+
+## KitchenOwl long-lived token diagnostics (v2.1.6)
+
+Forknook locally checks JWT formatting and a complete HMAC signature segment before contacting KitchenOwl. This is a formatting check, not verification of authenticity. Known KitchenOwl validation errors, including signature errors and numeric JWT subject compatibility, are shown without echoing the token. Copy the entire LLT from KitchenOwl and revoke any token exposed in chat or logs. Import is read-only and copy-first.

@@ -6,6 +6,7 @@ inside the *family* collection (never to external API consumers).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import ipaddress
@@ -249,6 +250,26 @@ def public_recipe_image(recipe_id:int,key:int=Depends(public_key)):
     return FileResponse(img,media_type='image/jpeg',headers={'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'})
 
 
+def validate_kitchenowl_llt(token: str) -> str:
+    """Check JWT formatting without inspecting or trusting claims."""
+    value=token.strip()
+    if value.lower().startswith('bearer '):
+        raise HTTPException(422,'Enter the complete KitchenOwl token without Bearer.')
+    parts=value.split('.')
+    if len(parts)!=3 or any(not re.fullmatch(r'[A-Za-z0-9_-]+',part) for part in parts):
+        raise HTTPException(422,'The KitchenOwl long-lived token is incomplete or malformed. Copy the entire token directly from KitchenOwl.')
+    try:
+        head=json.loads(base64.urlsafe_b64decode(parts[0]+'='*(-len(parts[0])%4)))
+        if not isinstance(head,dict) or head.get('alg') not in ('HS256','HS384','HS512'):
+            raise ValueError('Unsupported token header')
+        sig=base64.urlsafe_b64decode(parts[2]+'='*(-len(parts[2])%4))
+        if len(sig)!={'HS256':32,'HS384':48,'HS512':64}[head['alg']]:
+            raise ValueError('Incomplete token signature')
+    except (ValueError,UnicodeError):
+        raise HTTPException(422,'The KitchenOwl long-lived token is incomplete or malformed (invalid JWT header or signature). Generate a new token and copy the full value.')
+    return value
+
+
 class KitchenOwlSource(BaseModel):
     url:str=Field(min_length=8,max_length=2048)
     token:str=Field(min_length=12,max_length=4096)
@@ -300,7 +321,22 @@ async def ko_get(client:httpx.AsyncClient,origin:str,token:str,path:str):
                     detail=f'KitchenOwl rejected the authentication token (HTTP {r.status_code}). Confirm the long-lived token is from this instance; paste the token only, without Bearer or quotes.'
                 else:
                     detail=f'KitchenOwl API returned HTTP {r.status_code} for {path.split("/")[-1] or "households"}'
-                if reason and not body_forbidden:detail+=': '+reason
+                known_auth_errors={
+                    'Signature verification failed',
+                    'Subject must be a string',
+                    'Not enough segments',
+                    'Invalid header padding',
+                    'The token has expired',
+                    'Token has expired',
+                    'Token has been revoked',
+                    'Only non-refresh tokens are allowed',
+                    'The specified alg value is not allowed',
+                    'Missing Authorization Header',
+                }
+                if reason and (not body_forbidden or reason in known_auth_errors):
+                    detail+=': '+reason
+                if reason=='Subject must be a string':
+                    detail+='. KitchenOwl may need JWT_VERIFY_SUB=False for numeric subject compatibility.'
                 raise HTTPException(502,detail)
             data=bytearray()
             async for chunk in r.aiter_bytes():
@@ -313,8 +349,9 @@ async def ko_get(client:httpx.AsyncClient,origin:str,token:str,path:str):
 @router.post('/admin/kitchenowl/households')
 async def kitchenowl_households(body:KitchenOwlSource,who:dict=Depends(base.admin)):
     origin=ko_origin(body.url)
+    token=validate_kitchenowl_llt(body.token)
     async with httpx.AsyncClient(timeout=20,trust_env=False,follow_redirects=False) as client:
-        data=await ko_get(client,origin,body.token,'/api/household')
+        data=await ko_get(client,origin,token,'/api/household')
     if isinstance(data,dict):data=data.get('results',data.get('households',[]))
     if not isinstance(data,list):raise HTTPException(502,'KitchenOwl did not return a household list')
     return [{'id':int(x['id']),'name':str(x.get('name','Household'))[:100]} for x in data if isinstance(x,dict) and isinstance(x.get('id'),int)][:100]
@@ -383,8 +420,9 @@ def _ko_recipe(record:dict)->base.RecipePayload:
 async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
     if body.household_id is None:raise HTTPException(422,'Select a KitchenOwl household')
     origin=ko_origin(body.url)
+    token=validate_kitchenowl_llt(body.token)
     async with httpx.AsyncClient(timeout=25,trust_env=False,follow_redirects=False) as client:
-        data=await ko_get(client,origin,body.token,f'/api/household/{body.household_id}/recipe')
+        data=await ko_get(client,origin,token,f'/api/household/{body.household_id}/recipe')
         if isinstance(data,dict):data=data.get('results',data.get('recipes',[]))
         if not isinstance(data,list):raise HTTPException(502,'KitchenOwl did not return a recipe list')
         if len(data)>base.MAX_IMPORTED_RECIPES:raise HTTPException(422,'More than 1000 recipes; migrate in batches')
@@ -395,7 +433,7 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
             if not isinstance(item_id,int) or item_id<1:invalid+=1;continue
             # KitchenOwl lists a household's recipes here, but its DETAIL
             # endpoint lives at /api/recipe/{id} (no household in path).
-            detail=await ko_get(client,origin,body.token,f'/api/recipe/{item_id}')
+            detail=await ko_get(client,origin,token,f'/api/recipe/{item_id}')
             if detail is None:
                 unavailable_ids.append(item_id)
                 continue
@@ -413,7 +451,7 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
                     media_path=(urlsplit('http://placeholder/'+photo.lstrip('/')).path if relative else parts.path if same_origin else '')
                     if media_path.startswith('/') and not parts.query and '..' not in media_path.split('/'):
                         try:
-                            async with client.stream('GET',origin+media_path,headers={'Authorization':'Bearer '+body.token}) as img_response:
+                            async with client.stream('GET',origin+media_path,headers={'Authorization':'Bearer '+token}) as img_response:
                                 if img_response.status_code==200 and img_response.headers.get('content-type','').startswith('image/'):
                                     buf=bytearray()
                                     async for chunk in img_response.aiter_bytes():
