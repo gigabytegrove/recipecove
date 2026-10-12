@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import os
 import time
 from collections import defaultdict, deque
@@ -21,7 +22,7 @@ import recipes
 import settings_store
 import updater
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -114,11 +115,9 @@ def health():
 
 @app.get("/")
 def home():
-    if forknook.configured() or not settings_store.configured():
-        return FileResponse(DATA / "web" / "forknook.html",media_type="text/html",headers=_FORK_HEADERS)
-    return FileResponse(DATA / "web" / "index.html", media_type="text/html", headers={
-        "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
-        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"})
+    # Forknook is the primary app on both fresh and upgraded installations.
+    # The original KitchenOwl importer remains reachable at /legacy.
+    return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
 
 
 @app.get("/api/setup/status")
@@ -354,10 +353,23 @@ def forknook_asset(asset_name:str):
            "sw.js":"text/javascript", "manifest.json":"application/manifest+json",
            "icon-192.png":"image/png","icon-512.png":"image/png",
            "forknook-logo.png":"image/png"}
-    if asset_name not in names:raise HTTPException(404,"Not found")
+    if asset_name not in names:
+        if _FORK_PATH.fullmatch(asset_name):
+            return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
+        raise HTTPException(404,"Not found")
     return FileResponse(DATA / "web" / asset_name,media_type=names[asset_name],
-                        headers={"Cache-Control":"no-cache" if asset_name=="sw.js" else "public, max-age=300",
+                        headers={"Cache-Control":"no-cache" if asset_name=="sw.js" else "no-store",
                                  "X-Content-Type-Options":"nosniff"})
+
+# Bookmarked and directly loaded SPA routes must return the same app shell.
+# Reject any unknown path instead of making every URL return HTTP 200.
+_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|categories|admin(?:/(?:users|backups|updates|ai))?)")
+
+@app.get("/app/{client_path:path}")
+def forknook_route(client_path: str):
+    if not _FORK_PATH.fullmatch(client_path):
+        raise HTTPException(404, "Unknown Forknook page")
+    return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
 
 @app.get("/legacy")
 def legacy_importer():
