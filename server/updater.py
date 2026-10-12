@@ -183,7 +183,7 @@ def _verified_files(release: dict) -> dict[str, bytes]:
     if metadata.get('version') != release['version']:
         raise ValueError('Release version does not match update contents')
     if metadata.get('requires_image'):
-        raise ValueError('This update changes the container runtime and cannot be applied by Forknook's unprivileged updater.')
+        raise ValueError("This update changes the container runtime and cannot be applied by Forknook\u0027s unprivileged updater.")
     # Python dependencies are installed in the image and cannot be changed
     # from the unprivileged updater. The stable launcher isn't executed from
     # the overlay; changes to it are not needed for Python/UI-only updates.
