@@ -21,10 +21,12 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import recipes
+import forknook_images
 import media
 import updater
 import settings_store
@@ -165,7 +167,10 @@ def principal(authorization: str | None = Header(default=None)) -> dict:
                 JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.enabled=1""",
                 (hashlib.sha256(token.encode()).hexdigest(),time.time())).fetchone()
         if not row: raise HTTPException(401, "Session expired; sign in again")
-        return dict(row)
+        found=dict(row)
+        import forknook_features
+        found['role']=forknook_features.effective_role(db,found)
+        return found
 
 
 def admin(who: dict = Depends(principal)) -> dict:
@@ -187,7 +192,7 @@ class Setup(Credentials):
 
 class UserCreate(Credentials):
     display_name: str = "Family member"
-    role: str = "member"
+    role: str = "contributor"
 
 class UserPatch(BaseModel):
     display_name: str | None = None
@@ -211,6 +216,7 @@ class RecipePayload(BaseModel):
     category_id: int | None = None
     evidence: str = Field(default="",max_length=47000)
     requires_manual_review: bool = False
+    published: bool = False  # Explicit opt-in for read-only, API-key-protected external publication.
 
 class CategoryPayload(BaseModel):
     name: str = Field(min_length=1,max_length=80)
@@ -247,8 +253,13 @@ class ExternalImport(BaseModel):
     category_id: int | None = None
 
 
-def _user_record(row):
-    return {k:row[k] for k in ("id","username","display_name","role","enabled")}
+def _user_record(row, db=None):
+    result={k:row[k] for k in ("id","username","display_name","role","enabled")}
+    if db is not None:
+        import forknook_features
+        result['role']=forknook_features.effective_role(db,row)
+    else:result['role']='contributor' if result['role']=='member' else result['role']
+    return result
 
 @router.get("/setup/status")
 def setup_status():
@@ -300,16 +311,19 @@ def logout(authorization:str|None=Header(default=None),who:dict=Depends(principa
 @router.get("/admin/users")
 def users(who:dict=Depends(admin)):
     with database() as db:
-        return [_user_record(r) for r in db.execute("SELECT * FROM users ORDER BY username")]
+        return [_user_record(r,db) for r in db.execute("SELECT * FROM users ORDER BY username")]
 
 @router.post("/admin/users",status_code=201)
 def create_user(body:UserCreate,who:dict=Depends(admin)):
     validate_username(body.username);validate_password(body.password)
-    if body.role not in ("admin","member"):raise HTTPException(422,"Invalid role")
+    import forknook_features as features
+    requested='contributor' if body.role=='member' else body.role
+    if requested not in features.ROLES:raise HTTPException(422,"Invalid role")
     with LOCK,database() as db:
         try:
             row=db.execute("INSERT INTO users(username,display_name,salt,digest,role,created_at) VALUES (?,?,?,?,?,?)",
-                (body.username,body.display_name[:100],(salt:=secrets.token_bytes(24)).hex(),password_hash(body.password,salt),body.role,time.time()))
+                (body.username,body.display_name[:100],(salt:=secrets.token_bytes(24)).hex(),password_hash(body.password,salt),'admin' if requested=='admin' else 'member',time.time()))
+            db.execute('INSERT INTO role_assignments(user_id,role) VALUES (?,?)',(row.lastrowid,requested))
             db.commit()
         except sqlite3.IntegrityError as exc:raise HTTPException(409,"Username already exists") from exc
         return {"id":row.lastrowid}
@@ -319,11 +333,14 @@ def patch_user(user_id:int,body:UserPatch,who:dict=Depends(admin)):
     with LOCK,database() as db:
         row=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
         if not row:raise HTTPException(404,"User not found")
-        role=body.role if body.role is not None else row["role"]
+        import forknook_features as features
+        current=features.effective_role(db,row)
+        role=('contributor' if body.role=='member' else body.role) if body.role is not None else current
         enabled=int(body.enabled) if body.enabled is not None else row["enabled"]
-        if role not in ("admin","member"):raise HTTPException(422,"Invalid role")
-        if row["role"]=="admin" and (role!="admin" or not enabled):
-            count=db.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND enabled=1").fetchone()[0]
+        if role not in features.ROLES:raise HTTPException(422,"Invalid role")
+        if current=="admin" and (role!="admin" or not enabled):
+            count=db.execute("""SELECT COUNT(*) FROM users u LEFT JOIN role_assignments a ON a.user_id=u.id
+                     WHERE u.enabled=1 AND coalesce(a.role,u.role)='admin'""").fetchone()[0]
             if count<2:raise HTTPException(409,"Cannot disable the last active administrator")
         display=body.display_name.strip() if body.display_name is not None else row["display_name"]
         if not 1<=len(display)<=100:raise HTTPException(422,"Invalid display name")
@@ -332,7 +349,9 @@ def patch_user(user_id:int,body:UserPatch,who:dict=Depends(admin)):
             salt=secrets.token_bytes(24)
             db.execute("UPDATE users SET salt=?,digest=? WHERE id=?",(salt.hex(),password_hash(body.password,salt),user_id))
             db.execute("DELETE FROM sessions WHERE user_id=?",(user_id,))
-        db.execute("UPDATE users SET display_name=?,role=?,enabled=? WHERE id=?",(display,role,enabled,user_id))
+        db.execute("UPDATE users SET display_name=?,role=?,enabled=? WHERE id=?",(display,'admin' if role=='admin' else 'member',enabled,user_id))
+        db.execute('INSERT INTO role_assignments(user_id,role) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET role=excluded.role',
+                   (user_id,role))
         if not enabled:db.execute("DELETE FROM sessions WHERE user_id=?",(user_id,))
         db.commit()
     return {"success":True}
@@ -343,6 +362,8 @@ def categories(who:dict=Depends(principal)):
 
 @router.post("/categories",status_code=201)
 def create_category(body:CategoryPayload,who:dict=Depends(principal)):
+    import forknook_features
+    if not forknook_features.can_approve(who):raise HTTPException(403,'Category management requires approver permission')
     if not re.fullmatch(r"#[0-9a-fA-F]{6}",body.color):raise HTTPException(422,"Invalid color")
     with LOCK,database() as db:
         try:
@@ -371,6 +392,27 @@ def _category_exists(db,category_id:int|None):
     if category_id is not None and not db.execute("SELECT 1 FROM categories WHERE id=?",(category_id,)).fetchone():
         raise HTTPException(422,"Category does not exist")
 
+@router.post('/images/upload',status_code=201)
+async def upload_recipe_image(file:UploadFile=File(...),who:dict=Depends(principal)):
+    import forknook_features as features
+    features.require_contributor(who)
+    if file.content_type not in ('image/jpeg','image/png','image/webp'):
+        raise HTTPException(415,'Use a JPG, PNG or WebP image')
+    try:
+        content=await file.read(forknook_images.MAX_BYTES+1)
+        try:
+            return {'image_url':await run_in_threadpool(forknook_images.store_upload,content)}
+        except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+    finally:
+        await file.close()
+
+
+@router.get('/images/{filename}')
+def read_recipe_image(filename:str,who:dict=Depends(principal)):
+    image=forknook_images.get_file('/api/v2/images/'+filename)
+    return FileResponse(image,media_type='image/jpeg',headers={'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'})
+
+
 @router.get("/recipes")
 def list_recipes(q:str="",category_id:int|None=None,state:str="",who:dict=Depends(principal)):
     with database() as db:
@@ -395,8 +437,15 @@ def get_recipe(recipe_id:int,who:dict=Depends(principal)):
 
 @router.post("/recipes",status_code=201)
 def create_recipe(body:RecipePayload,who:dict=Depends(principal)):
+    import forknook_features as features
+    features.require_contributor(who)
+    body=body.model_copy(update={"image_url":forknook_images.capture_best_effort(body.image_url)})
     with LOCK,database() as db:
         _category_exists(db,body.category_id)
+        if body.published and not features.can_approve(who):
+            body=body.model_copy(update={'published':False})
+        if features.approval_required(db,who):
+            return features.submit_recipe(db,body,who)
         now=time.time()
         result=db.execute("INSERT INTO recipes(title,data,category_id,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?)",
                           (body.title.strip(),body.model_dump_json(),body.category_id,who["id"],now,now))
@@ -405,8 +454,14 @@ def create_recipe(body:RecipePayload,who:dict=Depends(principal)):
 
 @router.put("/recipes/{recipe_id}")
 def update_recipe(recipe_id:int,body:RecipePayload,who:dict=Depends(principal)):
+    import forknook_features as features
+    features.require_contributor(who)
+    if not features.can_approve(who):raise HTTPException(403,'Only family approvers can edit approved recipes; suggest a new version instead')
+    body=body.model_copy(update={"image_url":forknook_images.capture_best_effort(body.image_url)})
     with LOCK,database() as db:
         _recipe_exists(db,recipe_id);_category_exists(db,body.category_id)
+        if not features.can_approve(who):
+            raise HTTPException(403,'Only family approvers can edit approved recipes; suggest a new version instead')
         db.execute("UPDATE recipes SET title=?,data=?,category_id=?,updated_at=? WHERE id=?",
                    (body.title.strip(),body.model_dump_json(),body.category_id,time.time(),recipe_id));db.commit()
     return {"success":True,"id":recipe_id}
@@ -558,7 +613,7 @@ def feeds(who:dict=Depends(principal)):
     with database() as db:return [dict(r) for r in db.execute("SELECT * FROM feeds ORDER BY title")]
 
 @router.post("/feeds",status_code=201)
-def add_feed(body:FeedPayload,who:dict=Depends(principal)):
+def add_feed(body:FeedPayload,who:dict=Depends(admin)):
     # Feed URL validation is repeated at request time to defend against rebinding.
     try:recipes.validate_external_url(body.url)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
@@ -639,6 +694,7 @@ async def preview_url(body:ExternalImport,who:dict=Depends(principal)):
                        media.extract_facebook if provider=="facebook" else media.extract_instagram,body.url)
             result=await recipes.parse_text(details['text'],source_url=details.get('source_url',''),source_type=provider)
             result.evidence=details['text'][:recipes.MAX_TEXT]
+            result.image_url=details.get('image_url') or result.image_url
             if not (result.ingredients and result.instructions):result.requires_manual_review=True
         else:
             document,final_url=await recipes.page_html(body.url)
@@ -673,7 +729,7 @@ async def preview_video(file:UploadFile=File(...),who:dict=Depends(principal)):
     parsed.requires_manual_review=not(bool(parsed.ingredients) and bool(parsed.instructions))
     return from_parsed(parsed)
 
-@router.post("/imports/url",status_code=201)
+@router.post("/imports/url",status_code=201,deprecated=True)
 async def import_url(body:ExternalImport,who:dict=Depends(principal)):
     try:
         provider=media.social_provider(body.url)
@@ -682,6 +738,7 @@ async def import_url(body:ExternalImport,who:dict=Depends(principal)):
                        media.extract_facebook if provider=="facebook" else media.extract_instagram,body.url)
             result=await recipes.parse_text(details['text'],source_url=details.get('source_url',''),source_type=provider)
             result.evidence=details['text'][:recipes.MAX_TEXT]
+            result.image_url=details.get('image_url') or result.image_url
             if not (result.ingredients and result.instructions):result.requires_manual_review=True
         else:
             document,final_url=await recipes.page_html(body.url)
@@ -699,7 +756,7 @@ async def import_url(body:ExternalImport,who:dict=Depends(principal)):
     except ValueError as exc:raise HTTPException(422,"Could not validate extracted recipe") from exc
     return create_recipe(recipe,who)
 
-@router.post("/imports/text",status_code=201)
+@router.post("/imports/text",status_code=201,deprecated=True)
 async def import_text(body:dict,who:dict=Depends(principal)):
     content=body.get('text','')
     if not isinstance(content,str) or len(content)>47000:raise HTTPException(422,"Invalid import text")
@@ -707,7 +764,7 @@ async def import_text(body:dict,who:dict=Depends(principal)):
     data=parsed.model_dump();data['notes']=data.get('notes') or '';data['description']=data.get('description') or ''
     return create_recipe(RecipePayload.model_validate(data),who)
 
-@router.post("/imports/image",status_code=201)
+@router.post("/imports/image",status_code=201,deprecated=True)
 async def import_image(file:UploadFile=File(...),who:dict=Depends(principal)):
     if file.content_type not in ('image/jpeg','image/png','image/webp'):raise HTTPException(415,"Use a JPG, PNG or WebP image")
     content=await file.read(10*1024*1024+1)
@@ -716,7 +773,7 @@ async def import_image(file:UploadFile=File(...),who:dict=Depends(principal)):
     data=parsed.model_dump();data['notes']=data.get('notes') or '';data['description']=data.get('description') or ''
     return create_recipe(RecipePayload.model_validate(data),who)
 
-@router.post("/imports/video",status_code=201)
+@router.post("/imports/video",status_code=201,deprecated=True)
 async def import_video(file:UploadFile=File(...),who:dict=Depends(principal)):
     if not (file.content_type or '').startswith('video/'):raise HTTPException(415,"Use a video file")
     try:info=await run_in_threadpool(media.run_exclusive,media.process_local_file,file)

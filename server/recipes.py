@@ -144,8 +144,10 @@ def parse_document(html: str, source: str) -> Recipe:
         for el in soup.select(selector):
             value = el.get_text(" ", strip=True)
             if value and value not in target: target.append(value)
+    social_photo=soup.find('meta',property='og:image') or soup.find('meta',attrs={'name':'twitter:image'})
+    photo_url=urljoin(source,social_photo.get('content','')) if social_photo and social_photo.get('content') else None
     return Recipe(title=title[:300], ingredients=[ingredient(s) for s in lines_ing[:200]],
-                  instructions=lines_steps[:100], source_url=source, source_type="url",
+                  instructions=lines_steps[:100], image_url=photo_url, source_url=source, source_type="url",
                   confidence="medium" if lines_ing and lines_steps else "low",
                   fields_needing_review=["ingredients", "instructions"] if not (lines_ing and lines_steps) else [])
 

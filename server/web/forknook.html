@@ -27,7 +27,8 @@
       <button data-page="recipes">📖 <span>Recipes</span></button>
       <button data-page="plan">🗓️ <span>Meal planning</span></button>
       <button data-page="shopping">🛒 <span>Shopping lists</span></button>
-      <button data-page="sources">📥 <span>Imports & feeds</span></button>
+      <button data-page="sources">📥 <span>Import a recipe</span></button>
+      <button data-page="review">✅ <span>My submissions</span></button>
       <button data-page="categories">🏷️ <span>Categories</span></button>
       <button data-page="admin" id="admin-nav" hidden>⚙️ <span>Administration</span></button>
     </nav><div class="sidebar-bottom"><span id="current-user"></span><button id="logout" class="secondary">Sign out</button></div>
@@ -52,6 +53,11 @@
     <label>Cook (minutes)<input name="cook_time" type="number" min="0"></label>
     <label class="full">Ingredients (one per line)<textarea name="ingredients" rows="7" placeholder="2 cups flour\n1 tsp salt"></textarea></label>
     <label class="full">Directions (one step per line)<textarea name="instructions" rows="7" placeholder="Mix everything\nBake at 350°F"></textarea></label>
+    <label class="full">Recipe photo URL<input name="image_url" type="url" placeholder="https://example.com/recipe-photo.jpg"></label>
+    <label class="full">Or upload a recipe photograph<input id="recipe-photo-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <div class="full recipe-photo-editor" id="recipe-photo-preview"></div>
+    <p class="full muted small" id="recipe-photo-status">No recipe image selected</p>
+    <label class="full check-row"><input type="checkbox" id="publish-recipe"> Allow approved publication through the Forknook API (approvers only)</label>
     <label class="full">Tags (comma separated)<input name="tags" placeholder="family favorite, dinner"></label>
     <label class="full">Source URL<input name="source_url" type="url" placeholder="https://..."></label>
     <label class="full">Notes<textarea name="notes" rows="3"></textarea></label>

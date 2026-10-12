@@ -12,17 +12,19 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import kitchenowl
 import forknook
+import forknook_features
 import media
 import recipes
 import settings_store
 import updater
 
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -31,6 +33,7 @@ _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 async def lifespan(app: FastAPI):
     kitchenowl.initialize()
     forknook.initialize()
+    forknook_features.initialize()
     yield
 
 
@@ -284,6 +287,7 @@ async def _complete_media(info: dict, source_type: str) -> recipes.Recipe:
     result = await recipes.parse_text(info["text"], source_url=info.get("source_url", ""), source_type=source_type)
     warning = info.get("warning", "")
     result.evidence = info["text"][:recipes.MAX_TEXT]
+    result.image_url = info.get("image_url") or result.image_url
     result.extraction = info.get("extraction", {})
     if result.extraction.get("speech") not in (None, "Transcribed spoken words"):
         detail = "Video speech: " + result.extraction["speech"]
@@ -333,13 +337,22 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
 # Native Forknook RMS lives alongside the original import endpoints so existing
 # deployments and mobile clients continue to function during migration.
 app.include_router(forknook.router)
+app.include_router(forknook_features.router)
+
+@app.get('/api/v2/openapi.json',include_in_schema=False)
+def forknook_openapi():
+    """Stable v2 contract for Android and future WordPress integrations."""
+    routes=[r for r in app.routes if getattr(r,'path','').startswith('/api/v2/') and
+            getattr(r,'include_in_schema',False)]
+    return get_openapi(title='Forknook API v2',version=VERSION,routes=routes)
+
 
 _FORK_HEADERS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 }
 
 @app.get("/app")
@@ -363,7 +376,7 @@ def forknook_asset(asset_name:str):
 
 # Bookmarked and directly loaded SPA routes must return the same app shell.
 # Reject any unknown path instead of making every URL return HTTP 200.
-_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|categories|admin(?:/(?:users|backups|updates|ai))?)")
+_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|review|categories|admin(?:/(?:users|backups|updates|ai|imports|review|api))?)")
 
 @app.get("/app/{client_path:path}")
 def forknook_route(client_path: str):

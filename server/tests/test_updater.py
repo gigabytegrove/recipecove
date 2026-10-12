@@ -18,7 +18,7 @@ import launcher
 import updater
 
 
-def make_release(server: Path, version: str = '2.0.2', change_dep=False):
+def make_release(server: Path, version: str = '2.1.0', change_dep=False):
     files = {}
     for path in server.glob('*.py'):
         files[path.name] = path.read_bytes()
@@ -69,7 +69,7 @@ def patches(tmp_path,monkeypatch):
 
 def test_check_release(patches):
     found=updater.check()
-    assert found['available'] and found['latest_version']=='2.0.2'
+    assert found['available'] and found['latest_version']=='2.1.0'
     assert found['current_version']=='2.0.1'
     assert 'bundle' not in found
 
@@ -78,7 +78,7 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'2.0.2' in result['app.py']
+    assert result['app.py'] and b'2.1.0' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))
@@ -100,7 +100,7 @@ def test_install_switch_and_manual_rollback(patches):
     status=updater.state()
     assert status['phase']=='restarting',status
     pointer=updater.installed()
-    assert pointer['version']=='2.0.2'
+    assert pointer['version']=='2.1.0'
     assert pointer['previous']['version']=='2.0.1'
     assert (updater.DATA/'releases'/pointer['release']/'app.py').is_file()
     assert updater.REQUEST.exists()

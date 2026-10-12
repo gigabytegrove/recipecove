@@ -1,4 +1,4 @@
-const VERSION='forknook-shell-2.0.2';
+const VERSION='forknook-shell-2.1.0';
 const ASSETS=['/app/','/app/forknook.css','/app/forknook.js','/app/icon-192.png','/app/icon-512.png','/app/manifest.json'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
