@@ -10,13 +10,13 @@ import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 
 from fastapi import HTTPException, UploadFile
 
 
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 MAX_UPLOAD = 80 * 1024 * 1024
 MAX_SECONDS = 900
 MAX_EXTRACT_CHARS = 47000
@@ -41,6 +41,61 @@ def validate_instagram_url(url: str) -> str:
     if not match:
         raise ValueError("Expected an Instagram Reel or post URL")
     return f"https://www.instagram.com/{match.group(1)}/{match.group(2)}/"
+
+
+
+def validate_facebook_url(url: str) -> str:
+    """Accept known Facebook video/reel URL shapes only, never arbitrary domains."""
+    try:
+        parsed = urlsplit(url.strip())
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Malformed Facebook URL") from exc
+    host = (parsed.hostname or "").lower()
+    if (parsed.scheme != "https" or host not in
+            {"facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch", "www.fb.watch"}
+            or parsed.username or parsed.password or port not in (None, 443)):
+        raise ValueError("Enter an HTTPS Facebook video, Reel, or fb.watch URL")
+    path = parsed.path.rstrip("/") or "/"
+    if host in {"fb.watch", "www.fb.watch"}:
+        if not re.fullmatch(r"/[A-Za-z0-9_-]{5,100}", path):
+            raise ValueError("Unrecognized fb.watch share link")
+        return "https://fb.watch" + path + "/"
+    if re.fullmatch(r"/(?:reel|reels|videos)/[0-9]{5,30}", path, flags=re.I):
+        return "https://www.facebook.com" + path + "/"
+    if re.fullmatch(r"/[A-Za-z0-9._-]{1,100}/videos/(?:[A-Za-z0-9._-]+/)?[0-9]{5,30}", path, flags=re.I):
+        return "https://www.facebook.com" + path + "/"
+    if re.fullmatch(r"/share/(?:v|r)/[A-Za-z0-9_-]{5,120}", path, flags=re.I):
+        return "https://www.facebook.com" + path + "/"
+    if path.lower() in ("/watch", "/video.php"):
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+        if re.fullmatch(r"[0-9]{5,30}", video_id):
+            return "https://www.facebook.com/watch/?v=" + video_id
+    raise ValueError("This Facebook link is not a recognized video or Reel. Share a Facebook video/reel link or upload the video file.")
+
+
+def social_provider(url: str) -> str | None:
+    """Return platform or reject unsupported platform links before HTML scraping."""
+    try:
+        host = (urlsplit(url.strip()).hostname or "").lower()
+    except ValueError as exc:
+        raise ValueError("Malformed URL") from exc
+    if host in {"facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch", "www.fb.watch"}:
+        validate_facebook_url(url)
+        return "facebook"
+    if host in {"instagram.com", "www.instagram.com", "m.instagram.com"}:
+        validate_instagram_url(url)
+        return "instagram"
+    return None
+
+
+def _facebook_candidates(url: str) -> list[str]:
+    candidates = [url]
+    # The video-specific watch endpoint sometimes works when the post page does not.
+    match = re.search(r"/videos/(?:[A-Za-z0-9._-]+/)?([0-9]{5,30})/?$", url)
+    if match:
+        candidates.append("https://www.facebook.com/watch/?v=" + match.group(1))
+    return candidates
 
 
 def run_command(args: list[str], timeout: int = 120) -> subprocess.CompletedProcess[str]:
@@ -164,32 +219,64 @@ def process_video(path: Path, workdir: Path, caption: str = "", source_url: str 
     }
 
 
-def extract_instagram(url: str) -> dict:
-    clean_url = validate_instagram_url(url)
-    with tempfile.TemporaryDirectory(prefix="bridge_instagram_") as temp:
+def extract_social_video(url: str, platform: str) -> dict:
+    if platform not in {"facebook", "instagram"}:
+        raise ValueError("Unsupported social video provider")
+    clean_url = validate_facebook_url(url) if platform == "facebook" else validate_instagram_url(url)
+    candidates = _facebook_candidates(clean_url) if platform == "facebook" else [clean_url]
+    with tempfile.TemporaryDirectory(prefix="ri_social_") as temp:
         workdir = Path(temp)
         args = ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress"]
         if COOKIE_PATH.is_file():
             args.extend(["--cookies", str(COOKIE_PATH)])
-        try:
-            meta = run_command(args + ["--dump-single-json", "--skip-download", clean_url], timeout=90)
-            info = json.loads(meta.stdout)
-        except (ValueError, json.JSONDecodeError) as exc:
-            raise ValueError("Instagram could not be read. Public posts may work; private/login-required or blocked Reels need a locally shared video file") from exc
-        if info.get("_type") == "playlist":
-            raise ValueError("Only single video posts can be imported")
+        info = None
+        selected_url = None
+        for candidate in candidates:
+            try:
+                metadata = run_command(args + ["--dump-single-json", "--skip-download", candidate], timeout=90)
+                data = json.loads(metadata.stdout)
+                if isinstance(data, dict) and data.get("_type") != "playlist":
+                    info, selected_url = data, candidate
+                    break
+            except (ValueError, json.JSONDecodeError, RuntimeError):
+                continue
+        if info is None or selected_url is None:
+            raise ValueError(
+                f"{platform.title()} did not provide the video. Login-restricted posts and platform blocks "
+                "cannot be extracted from a link. Share a locally saved video file or paste the post caption instead."
+            )
         title = str(info.get("title") or "")
         desc = str(info.get("description") or "")
         caption = desc if desc and desc != title else title
         filename = workdir / "source.%(ext)s"
-        run_command(args + [
-            "--max-filesize", "80M", "--format", "best[ext=mp4]/best",
-            "--output", str(filename), clean_url
-        ], timeout=240)
-        videos = [p for p in workdir.glob("source.*") if p.is_file()]
-        if len(videos) != 1 or videos[0].stat().st_size > MAX_UPLOAD:
-            raise ValueError("Instagram video was not downloaded or exceeded 80 MB")
+        try:
+            run_command(args + [
+                "--max-filesize", "80M", "--format", "best[ext=mp4]/best",
+                "--output", str(filename), selected_url
+            ], timeout=240)
+            videos = [v for v in workdir.glob("source.*") if v.is_file()]
+            if len(videos) != 1 or videos[0].stat().st_size > MAX_UPLOAD:
+                raise ValueError("Video missing or exceeded 80 MB limit")
+        except (ValueError, RuntimeError) as exc:
+            # Some Instagram photo posts have usable recipe captions but no video.
+            # We can return a caption-only source, but NEVER pretend to have processed video.
+            if len(desc.strip()) >= 80:
+                return {"text": desc.strip()[:MAX_EXTRACT_CHARS], "source_url": clean_url,
+                        "has_caption": True, "has_speech": False, "has_visible_text": False,
+                        "warning": "Only the post caption was accessible; no video was processed. Review all recipe fields."}
+            raise ValueError(
+                f"{platform.title()} video could not be downloaded. If this link works in your "
+                "browser but not the importer, upload the video file or paste its caption."
+            ) from exc
         return process_video(videos[0], workdir, caption, clean_url)
+
+
+def extract_instagram(url: str) -> dict:
+    return extract_social_video(url, "instagram")
+
+
+def extract_facebook(url: str) -> dict:
+    return extract_social_video(url, "facebook")
 
 
 def process_local_file(upload: UploadFile) -> dict:

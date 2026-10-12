@@ -39,6 +39,8 @@ class Recipe(BaseModel):
     confidence: str = "low"
     fields_needing_review: list[str] = Field(default_factory=list)
     source_type: str | None = None
+    evidence: str = Field(default="", max_length=MAX_TEXT)
+    requires_manual_review: bool = False
 
 
 class ParseRequest(BaseModel):

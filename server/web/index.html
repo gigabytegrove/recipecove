@@ -33,13 +33,14 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <form id="admin-login-form"><label for="admin-login-password">Administrator password</label><input id="admin-login-password" type="password" autocomplete="current-password" required><button type="submit">Sign in</button></form></section>
 <section id="login" class="card hidden"><h1>KitchenOwl account sign-in</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household. Administrators may use the sign-in above instead.</p>
 <form id="login-form"><label for="username">Username</label><input id="username" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Connect</button></form></section>
-<div id="workspace" class="hidden"><section class="card"><div class="row"><div><h2>Import a recipe</h2><p class="muted">Paste a recipe page, Instagram Reel URL, or recipe text. Nothing saves until you approve it.</p></div><div><label for="household">Save to household</label><select id="household"></select></div></div>
-<label for="source">Link or recipe text</label><textarea id="source" placeholder="Paste any recipe URL, Instagram Reel, or ingredients and instructions..."></textarea>
+<div id="workspace" class="hidden"><section class="card"><div class="row"><div><h2>Import a recipe</h2><p class="muted">Paste a recipe website, Facebook video, Instagram Reel, or recipe text. Nothing saves until you approve it.</p></div><div><label for="household">Save to household</label><select id="household"></select></div></div>
+<label for="source">Link or recipe text</label><textarea id="source" placeholder="Paste a recipe website, Facebook/Instagram video, or ingredients and instructions..."></textarea>
 <div class="row"><div><label for="upload">Or choose an image / video</label><input type="file" id="upload" accept="image/jpeg,image/png,image/webp,video/*"></div><div><label>&nbsp;</label><button id="extract" type="button">Extract &amp; preview</button></div></div></section>
 <section id="preview" class="card hidden"><h2>Review the recipe</h2><p class="muted">Check every ingredient and step. Edit any detail before saving.</p>
 <div class="split"><div><label>Recipe title</label><input id="title" maxlength="300"><label>Description</label><textarea id="description" rows="3"></textarea><label>Ingredients — one per line</label><textarea id="ingredients" rows="8"></textarea></div><div><label>Servings</label><input id="servings"><label>Instructions — one step per line</label><textarea id="instructions" rows="10"></textarea><label>Notes</label><textarea id="notes" rows="3"></textarea></div></div>
 <div class="row"><div><label>Prep minutes</label><input id="prep" type="number" min="0" max="100000"></div><div><label>Cook minutes</label><input id="cook" type="number" min="0" max="100000"></div><div><label>Total minutes</label><input id="total" type="number" min="0" max="100000"></div></div>
-<label>Original source URL</label><input id="url"><p class="caption" id="confidence"></p><button id="save">Add to KitchenOwl</button></section></div></div>
+<label>Original source URL</label><input id="url"><p class="caption" id="confidence"></p>
+<details id="evidence-box" class="hidden"><summary>Extracted caption, spoken words and on-screen text</summary><pre id="evidence-text" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;background:#f2f6fa;border-radius:10px;padding:12px"></pre></details><button id="save">Add to KitchenOwl</button></section></div></div>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -67,20 +68,22 @@ function recipeFields(data){current=data;$('title').value=data.title||'';$('desc
  $('notes').value=data.notes||'';$('prep').value=data.prep_time??'';$('cook').value=data.cook_time??'';$('total').value=data.total_time??'';$('url').value=data.source_url||'';
  $('ingredients').value=(data.ingredients||[]).map(i=>[i.quantity,i.unit,i.name].filter(Boolean).join(' ') +(i.note?' ('+i.note+')':'')).join('\n');
  $('instructions').value=(data.instructions||[]).join('\n');$('confidence').textContent='Confidence: '+(data.confidence||'low')+' — Review: '+(data.fields_needing_review||[]).join(', ');
+ $('evidence-box').classList.toggle('hidden',!data.evidence);$('evidence-text').textContent=data.evidence||'';
  $('preview').classList.remove('hidden');$('preview').scrollIntoView({behavior:'smooth'});
 }
 function lines(s){return s.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);}
 $('extract').addEventListener('click',async()=>{
- if(busy)return; disabled(true);message('Extracting…');
+ if(busy)return; disabled(true);current=null;$('preview').classList.add('hidden');message('Extracting… Social videos may take several minutes while audio and video frames are processed.');
  try{
  const file=$('upload').files[0];let path,options={method:'POST'};
  if(file){const form=new FormData();form.append('file',file);path=file.type.startsWith('video/')?'/api/parse/video':'/api/parse/image';options.body=form;}
  else{const input=$('source').value.trim(); if(!input)throw Error('Paste a recipe URL or text, or select a file');
  const match=input.match(/https?:\/\/[^\s<>"']+/i);const url=match?match[0].replace(/[,.!)]+$/,''):null;
- const instagram=url&&/^https:\/\/(?:www\.)?instagram\.com\/(reel|p|tv)\//i.test(url);
- path=instagram?'/api/parse/instagram':url?'/api/parse/url':'/api/parse/text';
- options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(instagram||url?{url}:{text:input});}
- recipeFields(await api(path,options));message('Preview ready. Nothing has been saved.','success');
+ path=url?'/api/parse/url':'/api/parse/text';
+ options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(url?{url}:{text:input});}
+ const parsed=await api(path,options);recipeFields(parsed);
+ if(parsed.requires_manual_review){$('evidence-box').open=true;message('Source read, but ingredients and steps could not be identified automatically. Read the extracted source text below and enter missing details. Nothing has been saved.','error');}
+ else message('Recipe extracted. Review before saving. Nothing has been saved.','success');
  }catch(err){message(err.message,'error');}finally{disabled(false);}
 });
 $('save').addEventListener('click',async()=>{if(busy||!current)return;disabled(true);

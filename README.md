@@ -1,4 +1,4 @@
-# Recipe Importer 1.2.1
+# Recipe Importer 1.3.0
 
 **One Docker container. One native Android app. Direct KitchenOwl integration. No KO-Pellet or bridge.**
 
@@ -60,9 +60,9 @@ If you build from source instead, `cd server && docker compose up -d --build` us
 
 To update the KitchenOwl URL or LLT later, sign in as administrator on the web interface and select **Settings**. No container recreation is needed. Configuration, including the LLT and optional OpenAI key, is encrypted in `/data`, with the local encryption key also stored in `/data` (protect backups of this volume and restrict access to Docker host/root). Back up this entire volume; losing its key renders encrypted configuration unreadable. The server never returns stored tokens to browsers in settings/status endpoints. New KitchenOwl settings invalidate previously saved per-user sessions, but the administrator's LLT-based session remains valid.
 
-Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.2.1`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
+Check health with `curl -f http://127.0.0.1:8999/health`; it returns `status: ok`, `version: 1.3.0`, and `kitchenowl_configured: false` until setup. Importing is blocked until installation is complete.
 
-A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.2.1`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
+A successful GitHub Actions run publishes `linux/amd64` images to `ghcr.io/gigabytegrove/recipe-importer:latest` and `:1.3.0`. If your image pull times out, that is a registry/download connectivity issue, not an application startup or LLT error. Try the image pull again or build directly from the repository after network connectivity is restored.
 
 ### Low-memory operation (default)
 
@@ -118,7 +118,7 @@ Web browser ──> Recipe Importer web UI ────────────�
                          │  first-run setup + KitchenOwl API     │
                          │  HTML/JSON-LD recipe scraper           │
                          │  text + image OCR parser               │
-                         │  Instagram / video + Whisper / FFmpeg  │
+                         │  Facebook + Instagram + uploaded video / Whisper / FFmpeg  │
                          │  optional AI text structuring         │
                          └──────────────────┬─────────────────────┘
                                             │ confirmed saves only
@@ -134,10 +134,18 @@ python -m pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.2.1, intended for testing and verification on your network before migrating all recipe imports.
+Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.3.0, intended for testing and verification on your network before migrating all recipe imports.
 
 ## Recipe URL import and HTTP 403 responses
 
 The URL importer identifies as a web browser rather than advertising a scraper User-Agent. For Food Network it starts with a Firefox-style profile; when a site rejects the first profile with HTTP 403, Recipe Importer retries exactly once with a different profile. Redirect destinations continue to be checked for private or reserved addresses, and the HTML response size limit remains 3 MB. No additional container, headless browser, proxy, or external scraping service is introduced.
 
 Some sites can still prohibit automated access based on network location or other security controls. If both attempts are rejected, the app explains that access was denied and offers text or image import as alternatives. Support for any particular site's blocking policy cannot be guaranteed.
+
+## Facebook, Instagram and recipe websites
+
+Pasting a recognized Facebook video, Reel or fb.watch link (including `/page/videos/123` and `/watch/?v=123`) now runs the **video** pipeline rather than extracting a generic page title. Instagram Reel links use the same dispatcher. Ordinary recipe websites continue through structured data and HTML ingredient/instruction extraction. The Android app's existing generic URL endpoint also benefits from this server-side routing.
+
+When a video can be downloaded, Recipe Importer extracts the post caption, audio transcription using the one-shot CPU Whisper subprocess and sampled on-screen text with Tesseract. The preview includes the extracted source evidence for inspection. Without an OpenAI API key, conversational video transcripts may not convert automatically into structured ingredients and steps; in that case the editor clearly reports manual review and displays the captured text rather than falsely claiming that a recipe was imported.
+
+Some Facebook and Instagram links cannot be downloaded, including login-required, region-blocked and platform-restricted posts. Those fail with an explicit message and an alternative to upload a locally available video or paste its caption. Facebook is especially inconsistent and is not guaranteed to work for every public Reel. No browser automation container is required.
