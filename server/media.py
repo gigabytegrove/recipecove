@@ -284,6 +284,7 @@ def extract_social_video(url: str, platform: str) -> dict:
                 LOG.warning("%s video download unavailable; using caption only", platform)
                 return {"text": desc.strip()[:MAX_EXTRACT_CHARS], "source_url": clean_url,
                         "has_caption": True, "has_speech": False, "has_visible_text": False,
+                        "image_url": str(info.get("thumbnail") or "")[:2000],
                         "extraction": {"video": "Not downloaded (platform refused or download failed)",
                                        "caption": "Caption available", "speech": "Not attempted — no video",
                                        "onscreen": "Not attempted — no video"},
@@ -292,7 +293,9 @@ def extract_social_video(url: str, platform: str) -> dict:
                 f"{platform.title()} video could not be downloaded. If this link works in your "
                 "browser but not the importer, upload the video file or paste its caption."
             ) from exc
-        return process_video(videos[0], workdir, caption, clean_url)
+        result = process_video(videos[0], workdir, caption, clean_url)
+        result["image_url"] = str(info.get("thumbnail") or "")[:2000]
+        return result
 
 
 def extract_instagram(url: str) -> dict:
