@@ -165,28 +165,65 @@ def validate_external_url(url: str) -> None:
         raise ValueError("Private or reserved IP addresses cannot be imported")
 
 
+# Some recipe publishers reject HTTP clients advertising a scraper User-Agent.
+# Browser-style request profiles are lightweight and avoid bundling a browser.
+# Site-side anti-bot policies can still deny automated requests regardless of UA.
+_FIREFOX_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+_CHROME_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+def _page_profiles(url: str) -> tuple[dict[str, str], dict[str, str]]:
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "foodnetwork.com" or host.endswith(".foodnetwork.com"):
+        # Food Network has rejected generic recipe scraper UAs in the past.
+        return _FIREFOX_HEADERS, _CHROME_HEADERS
+    return _CHROME_HEADERS, _FIREFOX_HEADERS
+
+
 async def page_html(url: str) -> tuple[str, str]:
     async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=8), trust_env=False, follow_redirects=False) as client:
         current = url
         for _ in range(5):
             validate_external_url(current)
-            try:
-                async with client.stream("GET", current, headers={"User-Agent": "RecipeImporter/1.1 (+self-hosted personal recipe manager)", "Accept": "text/html,application/xhtml+xml"}) as resp:
-                    if resp.status_code in (301, 302, 303, 307, 308):
-                        target = resp.headers.get("location")
-                        if not target: raise ValueError("Redirect without a destination")
-                        current = urljoin(current, target)
-                        continue
-                    if resp.status_code != 200: raise ValueError(f"Recipe site returned HTTP {resp.status_code}")
-                    if "text/html" not in resp.headers.get("content-type", "").lower():
-                        raise ValueError("URL did not return an HTML recipe page")
-                    data = bytearray()
-                    async for chunk in resp.aiter_bytes():
-                        data.extend(chunk)
-                        if len(data) > MAX_HTML: raise ValueError("Web page exceeds 3 MB limit")
-                    return data.decode(resp.encoding or "utf-8", errors="replace"), current
-            except httpx.HTTPError as exc:
-                raise ValueError("Could not download the recipe page") from exc
+            profiles = _page_profiles(current)
+            for attempt, headers in enumerate(profiles):
+                try:
+                    async with client.stream("GET", current, headers=headers) as resp:
+                        if resp.status_code in (301, 302, 303, 307, 308):
+                            target = resp.headers.get("location")
+                            if not target: raise ValueError("Redirect without a destination")
+                            current = urljoin(current, target)
+                            break  # Validate the new URL before fetching it.
+                        if resp.status_code == 403 and attempt == 0:
+                            continue  # One alternate request profile, then stop.
+                        if resp.status_code == 403:
+                            raise ValueError(
+                                "Recipe site denied automated access (HTTP 403). "
+                                "Try sharing the recipe text or a screenshot instead."
+                            )
+                        if resp.status_code != 200:
+                            raise ValueError(f"Recipe site returned HTTP {resp.status_code}")
+                        if "text/html" not in resp.headers.get("content-type", "").lower():
+                            raise ValueError("URL did not return an HTML recipe page")
+                        data = bytearray()
+                        async for chunk in resp.aiter_bytes():
+                            data.extend(chunk)
+                            if len(data) > MAX_HTML: raise ValueError("Web page exceeds 3 MB limit")
+                        return data.decode(resp.encoding or "utf-8", errors="replace"), current
+                except httpx.HTTPError as exc:
+                    raise ValueError("Could not download the recipe page") from exc
+            else:
+                # A redirect always breaks the inner loop. The normal path
+                # returns or raises; reaching here would mean neither did.
+                raise ValueError("Could not download the recipe page")
     raise ValueError("Too many redirects")
 
 
