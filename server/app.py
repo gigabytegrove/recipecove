@@ -21,7 +21,7 @@ import recipes
 import settings_store
 import updater
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 

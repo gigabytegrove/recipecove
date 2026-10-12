@@ -13,6 +13,7 @@ import re
 import secrets
 import sqlite3
 import threading
+from contextlib import contextmanager
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -26,6 +27,7 @@ from starlette.concurrency import run_in_threadpool
 import recipes
 import media
 import updater
+import settings_store
 
 router = APIRouter(prefix="/api/v2", tags=["Forknook"])
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
@@ -36,12 +38,22 @@ MAX_IMPORTED_RECIPES = 1000
 _ATTEMPTS: dict[str, list[float]] = {}
 
 
+@contextmanager
 def database():
+    # sqlite3.Connection.__exit__ commits but does NOT close connections.
+    # Explicitly close them after every request to prevent long-running FD leaks.
     con = sqlite3.connect(DB_FILE, timeout=15)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys = ON")
-    con.execute("PRAGMA busy_timeout = 15000")
-    return con
+    try:
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA foreign_keys = ON")
+        con.execute("PRAGMA busy_timeout = 15000")
+        yield con
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def initialize():
@@ -166,8 +178,8 @@ def mutate(db, sql: str, args: tuple=()):
 
 
 class Credentials(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1,max_length=200)
+    password: str = Field(min_length=1,max_length=1024)
 
 class Setup(Credentials):
     setup_code: str
@@ -779,3 +791,16 @@ def updates_install(who:dict=Depends(admin)):
 @router.post("/admin/updates/rollback",status_code=202)
 def updates_rollback(who:dict=Depends(admin)):
     return updater.rollback()
+
+class AISettings(BaseModel):
+    api_key: str | None = Field(default=None,max_length=2048)
+    model: str = Field(default="gpt-4o-mini",min_length=2,max_length=80)
+
+@router.get("/admin/ai")
+def ai_status(who:dict=Depends(admin)):
+    return settings_store.forknook_ai_status()
+
+@router.post("/admin/ai")
+def ai_save(body:AISettings,who:dict=Depends(admin)):
+    settings_store.save_forknook_ai(api_key=body.api_key,model=body.model)
+    return settings_store.forknook_ai_status()

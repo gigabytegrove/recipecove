@@ -91,13 +91,15 @@ def kitchenowl_llt() -> str:
 
 
 def ai_api_key() -> str:
+    item = _forknook_ai_record()
     with _LOCK:
-        return _config.get("openai_api_key", "")
+        return item.get("api_key") or _config.get("openai_api_key", "")
 
 
 def ai_model() -> str:
+    item = _forknook_ai_record()
     with _LOCK:
-        return _config.get("openai_model", "gpt-4o-mini")
+        return item.get("model") or _config.get("openai_model", "gpt-4o-mini")
 
 
 def public_status() -> dict:
@@ -203,3 +205,37 @@ def save(*, url: str, llt: str, admin_password: str | None = None,
         _write_private(CONFIG_FILE, _cipher.encrypt(json.dumps(saved, separators=(",", ":")).encode()))
         _config = saved
         CLAIM_FILE.unlink(missing_ok=True)
+
+
+def _forknook_ai_record() -> dict:
+    """Read optional Forknook AI settings without requiring KitchenOwl setup."""
+    path = DATA_DIR / "forknook-ai.enc"
+    with _LOCK:
+        if _cipher is None or not path.exists():
+            return {}
+        try:
+            return json.loads(_cipher.decrypt(path.read_bytes()))
+        except (InvalidToken, ValueError, UnicodeDecodeError) as exc:
+            raise RuntimeError("Cannot decrypt Forknook AI configuration; restore /data backup") from exc
+
+
+def forknook_ai_status() -> dict:
+    item = _forknook_ai_record()
+    return {"api_key_configured": bool(item.get("api_key") or ai_api_key()),
+            "model": item.get("model") or _config.get("openai_model", "gpt-4o-mini")}
+
+
+def save_forknook_ai(*, api_key: str | None, model: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9._-]{2,80}", model):
+        raise HTTPException(422, "Invalid AI model name")
+    if api_key is not None and len(api_key) > 2048:
+        raise HTTPException(422, "API key is too long")
+    path = DATA_DIR / "forknook-ai.enc"
+    with _LOCK:
+        if _cipher is None:
+            raise RuntimeError("Settings encryption has not initialized")
+        entry = _forknook_ai_record()
+        if api_key is not None:
+            entry["api_key"] = api_key.strip()
+        entry["model"] = model
+        _write_private(path, _cipher.encrypt(json.dumps(entry).encode()))

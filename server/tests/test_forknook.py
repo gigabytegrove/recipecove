@@ -143,3 +143,31 @@ def test_rss_atom_reader_no_network(client):
     assert c.get('/api/v2/feeds').status_code==401
     # Never fetch internal hosts; no data leak from loopback services.
     assert c.post('/api/v2/feeds',headers=h,json={'title':'Local','url':'http://127.0.0.1/rss'}).status_code==422
+
+
+def test_standalone_ai_settings_encrypted_and_admin_protected(client,tmp_path):
+    c,h=client
+    import settings_store
+    with patch.object(settings_store,'DATA_DIR',tmp_path):
+        assert c.get('/api/v2/admin/ai',headers=h).status_code==200
+        saved=c.post('/api/v2/admin/ai',headers=h,json={'api_key':'sk-dummy-test-secret','model':'gpt-4o-mini'})
+        assert saved.status_code==200,saved.text
+        assert saved.json()=={'api_key_configured':True,'model':'gpt-4o-mini'}
+        assert b'sk-dummy-test-secret' not in (tmp_path/'forknook-ai.enc').read_bytes()
+        assert settings_store.ai_api_key()=='sk-dummy-test-secret'
+        assert c.get('/api/v2/admin/ai').status_code==401
+        assert c.post('/api/v2/admin/ai',headers=h,json={'api_key':'','model':'gpt-4o-mini'}).status_code==200
+        assert not (tmp_path/'forknook-ai.enc').read_bytes().find(b'sk-dummy-test-secret')>=0
+
+
+def test_database_connections_commit_and_close(client):
+    c,h=client
+    import sqlite3
+    row=c.post('/api/v2/recipes',headers=h,json=SAMPLE)
+    assert row.status_code==201
+    # No active write transactions linger after the response; another connection
+    # can open an immediate write transaction and commit it.
+    with sqlite3.connect(forknook.DB_FILE,timeout=1) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        assert connection.execute('SELECT COUNT(*) FROM recipes').fetchone()[0]==1
+        connection.commit()
