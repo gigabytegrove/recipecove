@@ -1,4 +1,4 @@
-# Forknook — Family Recipe Management System (v2.0.0 testing release)
+# Forknook — Family Recipe Management System (v2.0.1 testing release)
 
 Forknook is a **standalone**, self-hosted family recipe manager. No KitchenOwl server, account or API token is needed to operate Forknook. This project expands the former Recipe Importer, and retains the existing image/video/website recipe extraction implementation and server updater for compatibility.
 
@@ -15,17 +15,18 @@ Forknook is a **standalone**, self-hosted family recipe manager. No KitchenOwl s
 | Meal planning | Calendar-style weekly touch view, breakfast/lunch/dinner/snack meal scheduling, portions, removal. |
 | iOS and browser | Responsive, touch-sized web UI/PWA under `/app/` with Safari Add to Home Screen support. iPad requires HTTPS for service-worker caching. Private API responses are **never** cached by the service worker. |
 | Android | Native installable APK using the same self-hosted web interface in a protected WebView, with Android share-sheet support for recipe links, images and videos. Local Windows Gradle-wrapper APK build. KitchenOwl username/password are no longer required. |
+| AI recipe structuring | Optional OpenAI API key configured in Forknook Administration; stored encrypted in `/data`, never sent to mobile devices. Video transcription/OCR remains local. |
 | Updates | Server's original GitHub-release/checksum/restart/rollback mechanism is retained, retargeted to `gigabytegrove/forknook`. Image and dependency changes still require a Docker image redeploy. |
 | Migration | Admin JSON import with **dry run first**, no overwrites/deletes, duplicate-name skips and migration audit counts. Admin can export Forknook data as JSON. |
 
 ## Safe test deployment — without touching Recipe Importer
 
-Publish and run **`ghcr.io/gigabytegrove/forknook:2.0.0`** in a separate Dokploy Compose app, without overwriting the original Recipe Importer container. Use port `8999` internally and a unique host port or proxy hostname. The new installation gets **its own** `/data` volume and therefore does not alter existing Recipe Importer configuration or existing KitchenOwl content.
+Publish and run **`ghcr.io/gigabytegrove/forknook:2.0.1`** in a separate Dokploy Compose app, without overwriting the original Recipe Importer container. Use port `8999` internally and a unique host port or proxy hostname. The new installation gets **its own** `/data` volume and therefore does not alter existing Recipe Importer configuration or existing KitchenOwl content.
 
 ```yaml
 services:
   forknook:
-    image: ghcr.io/gigabytegrove/forknook:2.0.0
+    image: ghcr.io/gigabytegrove/forknook:2.0.1
     container_name: forknook
     restart: unless-stopped
     ports:
