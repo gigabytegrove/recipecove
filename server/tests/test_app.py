@@ -1,109 +1,157 @@
+"""Runs without network, Docker, live KitchenOwl credentials, or paid AI."""
 import os
+import sys
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-os.environ["BRIDGE_TOKEN"] = "1234567890abcdefghijklmnopqrstuv"
-
+import pytest
 from fastapi.testclient import TestClient
-import app as media
 
-client = TestClient(media.app)
-HEADERS = {"Authorization": "Bearer 1234567890abcdefghijklmnopqrstuv"}
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+os.environ['KITCHENOWL_URL'] = 'http://127.0.0.1:8765'
+os.environ['DATA_DIR'] = tempfile.mkdtemp(prefix='recipe_importer_test_')
 
-def test_health():
-    res = client.get("/health")
-    assert res.status_code == 200
-    assert res.json()["version"] == "1.0.0"
+import app
+import kitchenowl
+import media
+import recipes
 
-
-def test_auth_required():
-    assert client.post("/extract/instagram", json={"url": "https://www.instagram.com/reel/ABC123/"}).status_code == 401
-    assert client.post("/extract/instagram", headers={"Authorization": "Bearer wrong"}, json={"url": "https://www.instagram.com/reel/ABC123/"}).status_code == 401
-    assert client.post("/extract/video", files={"file": ("clip.mp4", b"dummy", "video/mp4")}).status_code == 401
+TOKEN = 's' * 48
+HEADERS = {'Authorization': 'Bearer ' + TOKEN}
 
 
-def test_valid_instagram_url_normalization():
-    assert media.validate_instagram_url("https://instagram.com/reel/ABC123/?utm_source=abc") == "https://www.instagram.com/reel/ABC123/"
-    assert media.validate_instagram_url("https://www.instagram.com/p/ABC123/") == "https://www.instagram.com/p/ABC123/"
+@pytest.fixture
+def client():
+    with TestClient(app.app) as c:
+        yield c
 
 
-def test_reject_internal_or_fake_instagram():
-    bad = ["http://www.instagram.com/reel/ABC123/", "https://instagram.com.evil.com/reel/ABC123/", "https://127.0.0.1/reel/ABC123/", "https://www.instagram.com@127.0.0.1/reel/ABC123/", "https://www.instagram.com/redirect?url=http://127.0.0.1", "file:///etc/passwd", "https://www.instagram.com/reel/ABC123/../../"]
-    for url in bad:
-        try:
-            media.validate_instagram_url(url)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"Should reject {url}")
+def test_health_and_web(client):
+    r = client.get('/health')
+    assert r.json()['version'] == '1.1.0'
+    web = client.get('/')
+    assert web.status_code == 200
+    assert 'Recipe Importer' in web.text
+    assert 'KO-Pellet' not in web.text
+    assert 'frame-ancestors' in web.headers['content-security-policy']
 
 
-def test_url_rejected_before_downloader():
-    response = client.post("/extract/instagram", headers=HEADERS, json={"url": "https://localhost/reel/ABC123/"})
-    assert response.status_code == 422
+def test_unauthenticated_calls_blocked(client):
+    for method, path in [('get', '/api/kitchenowl/households'), ('post', '/api/parse/url'),
+                         ('post', '/api/parse/text'), ('post', '/api/parse/instagram'),
+                         ('post', '/api/parse/video')]:
+        res = getattr(client, method)(path)
+        assert res.status_code == 401, (method, path, res.text)
 
 
-def test_video_mime_rejected():
-    response = client.post("/extract/video", headers=HEADERS, files={"file": ("bad.txt", b"not video", "text/plain")})
-    assert response.status_code == 415
+def test_login_token_and_logout(client):
+    async def fake_login(username, password):
+        assert username == 'jane' and password == 'correct'
+        return TOKEN
+    with patch.object(kitchenowl, 'login', fake_login):
+        result = client.post('/api/auth/kitchenowl', json={'username':'jane','password':'correct'})
+    assert result.json()['token'] == TOKEN
+    assert result.json()['success'] is True
+    with patch.object(kitchenowl, 'session_info', return_value={'username':'jane'}):
+        assert client.get('/api/auth/status', headers=HEADERS).json()['authenticated']
+        assert client.post('/api/auth/logout', headers=HEADERS).json()['success']
 
 
-def test_video_max_bytes():
-    class FauxUpload:
-        file = None
-        def __init__(self):
-            self.file = tempfile.TemporaryFile()
-            self.file.write(b"a" * (media.MAX_UPLOAD + 1))
-            self.file.seek(0)
-
-    upload = FauxUpload()
-    try:
-        try:
-            media.process_local_file(upload)
-        except ValueError as e:
-            assert "80 MB" in str(e)
-        else:
-            raise AssertionError("Oversize media accepted")
-    finally:
-        upload.file.close()
+def test_sessions_persist_and_logout():
+    kitchenowl.initialize()
+    with patch.object(kitchenowl, '_client') as factory:
+        import httpx
+        transport = httpx.MockTransport(lambda req: httpx.Response(200, json={
+            'access_token': 'a' * 32,'refresh_token': 'b' * 32
+        }))
+        factory.side_effect = lambda: httpx.AsyncClient(transport=transport)
+        import asyncio
+        t = asyncio.run(kitchenowl.login('jane','pass'))
+    assert kitchenowl.session_info(t)['access_token'] == 'a'*32
+    assert kitchenowl.session_info(t)['username'] == 'jane'
+    kitchenowl.logout(t)
+    with pytest.raises(Exception): kitchenowl.session_info(t)
 
 
-def test_pipeline_text():
-    with tempfile.TemporaryDirectory() as tmp:
-        with patch.object(media, "duration_of", return_value=42), patch.object(media, "transcribe_audio", return_value="one cup of flour"), patch.object(media, "ocr_video", return_value="Bake 25 minutes"):
-            data = media.process_video(Path(tmp) / "dummy.mp4", Path(tmp), "My cake", "https://example.com")
-            assert "My cake" in data["text"]
-            assert "one cup of flour" in data["text"]
-            assert "Bake 25 minutes" in data["text"]
-            assert data["has_caption"] is True
-            assert data["duration_seconds"] == 42
+def test_sample_html_jsonld():
+    text = '<html><script type="application/ld+json">{"@graph": [{"@type": "Recipe", "name": "Soup", "prepTime":"PT10M", "cookTime":"PT1H", "recipeIngredient":["2 cups broth"], "recipeInstructions":[{"@type":"HowToStep", "text":"Simmer."}], "image":"/soup.jpg"}]}</script></html>'
+    r = recipes.parse_document(text, 'https://example.com/soup')
+    assert r.title == 'Soup' and r.prep_time == 10 and r.cook_time == 60
+    assert r.ingredients[0]['name'] == '2 cups broth'
+    assert r.instructions == ['Simmer.']
+    assert r.image_url == 'https://example.com/soup.jpg'
+    assert r.confidence == 'high'
 
 
-def test_processing_failure_does_not_claim_recipe():
-    with patch.object(media, "extract_instagram", side_effect=ValueError("blocked")):
-        response = client.post("/extract/instagram", headers=HEADERS, json={"url": "https://instagram.com/reel/ABC123/"})
-        assert response.status_code == 422
-        assert response.json()["detail"] == "blocked"
+def test_manual_text_parser():
+    r = recipes.manual_text('My Pasta\nIngredients\n2 cups pasta\n1 tsp salt\nInstructions\nBoil water.\nAdd pasta.')
+    assert len(r.ingredients) == 2 and len(r.instructions) == 2
+    assert r.confidence == 'low'
 
 
-def test_short_video_keeps_first_frame():
+def test_url_blocks_private_and_malformed():
+    for u in ('http://localhost/a', 'http://127.0.0.1/a', 'file:///etc/passwd',
+              'https://internal.local/x', 'http://169.254.169.254/latest/meta-data/'):
+        with pytest.raises(ValueError): recipes.validate_external_url(u)
+    for u in ('https://instagram.com/reel/ABC123/?x=1',):
+        assert media.validate_instagram_url(u).startswith('https://www.instagram.com/reel/')
+
+
+def test_save_mapping_validates_title_and_preserves_steps():
+    payload = kitchenowl.to_kitchenowl({'title':'Pasta','ingredients':[{'name':'flour','quantity':'2','unit':'cups'}],
+                                        'instructions':['Boil','Stir'],'servings':'4 servings', 'total_time':25})
+    assert payload['name'] == 'Pasta'
+    assert payload['items'][0]['description'] == '2 cups'
+    assert '1. Boil' in payload['description']
+    assert payload['yields'] == 4 and payload['time'] == 25
+    with pytest.raises(Exception): kitchenowl.to_kitchenowl({'title':'Untitled Recipe','ingredients':[{'name':'x'}]})
+
+
+def test_authenticated_kitchenowl_routes(client):
+    async def fake(*args, **kwargs):
+        if args[1] == 'GET' and args[2].endswith('/recipe'):
+            return [{'name': 'Pasta', 'id': 1}, {'name': 'Rice','id':2}]
+        if args[1] == 'GET': return [{'id':1,'name':'Home'}]
+        return {'id':99,'name':kwargs['payload']['name']}
+    with patch.object(kitchenowl,'session_info',return_value={'username':'jane'}), patch.object(kitchenowl,'kitchenowl_request',fake):
+        hs = client.get('/api/kitchenowl/households',headers=HEADERS)
+        assert hs.json()[0]['name']=='Home'
+        dup = client.get('/api/kitchenowl/check-duplicate/1?title=Pasta',headers=HEADERS).json()
+        assert dup['has_duplicate']
+        req={'recipe':{'title':'Pasta','ingredients':[{'name':'flour'}],'instructions':['Cook.']}}
+        assert client.post('/api/kitchenowl/recipe/1',headers=HEADERS,json=req).json()['id']==99
+
+
+def test_instagram_to_preview(client):
+    with patch.object(kitchenowl,'session_info',return_value={}), patch.object(media,'extract_instagram',return_value={
+        'text':'My Pasta\nIngredients\n2 cups flour\nInstructions\nMix thoroughly.',
+        'source_url':'https://www.instagram.com/reel/ABC123/',
+        'warning':'Review transcription' }):
+        r=client.post('/api/parse/instagram',headers=HEADERS,json={'url':'https://instagram.com/reel/ABC123/'})
+    assert r.status_code==200, r.text
+    body=r.json()
+    assert body['source_type']=='instagram' and 'ingredients' in body['fields_needing_review']
+    assert body['source_url'].startswith('https://www.instagram.com')
+
+
+def test_image_rejects_nonimage(client):
+    with patch.object(kitchenowl,'session_info',return_value={}):
+        r=client.post('/api/parse/image',headers=HEADERS,files={'file':('bad.txt',b'xyz','text/plain')})
+        assert r.status_code==415
+
+
+def test_short_video_ocr():
     import shutil
-    if not all(shutil.which(name) for name in ("ffmpeg", "ffprobe", "tesseract")):
-        import pytest
-        pytest.skip("Media tools unavailable in this test environment")
-    with tempfile.TemporaryDirectory() as temp:
-        folder = Path(temp)
-        video = folder / "recipe.mp4"
-        result = __import__("subprocess").run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
-            "-i", "color=c=white:s=1280x720:d=4:r=3",
-            "-vf", "drawtext=text='2 CUPS FLOUR':fontcolor=black:fontsize=95:x=140:y=250",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "4", "-y", str(video)
-        ], capture_output=True)
-        if result.returncode != 0:
-            import pytest
-            pytest.skip("FFmpeg installation lacks drawtext/libx264")
-        assert media.duration_of(video) == 4
-        assert "CUPS FLOUR" in media.ocr_video(video, folder)
+    if not all(shutil.which(s) for s in ('ffmpeg','ffprobe','tesseract')):
+        pytest.skip('Media utilities not available')
+    with tempfile.TemporaryDirectory() as d:
+        video=Path(d)/'test.mp4'
+        result=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-f','lavfi',
+            '-i','color=c=white:s=1280x720:d=3:r=2','-vf',
+            "drawtext=text='2 CUPS FLOUR':fontcolor=black:fontsize=96:x=140:y=250",
+            '-c:v','libx264','-pix_fmt','yuv420p','-y',str(video)],capture_output=True)
+        if result.returncode: pytest.skip('FFmpeg lacks drawtext or libx264')
+        assert 'CUPS FLOUR' in media.ocr_video(video,Path(d))

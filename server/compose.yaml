@@ -1,15 +1,19 @@
 services:
-  recipe-bridge-extractor:
+  recipe-importer:
     build: .
+    container_name: recipe-importer
     restart: unless-stopped
     environment:
-      BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Set BRIDGE_TOKEN in .env}
+      KITCHENOWL_URL: ${KITCHENOWL_URL:?Set KITCHENOWL_URL in .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
     ports:
-      - "${BIND_ADDRESS:-0.0.0.0}:8999:8999"
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8999}:8999"
     volumes:
+      - recipe-importer-data:/data
       - whisper-models:/models
-      # Optional: your own exported Instagram cookies if authorized to use them
+      # Optional authorized Instagram cookie export:
       # - ./instagram_cookies.txt:/run/secrets/instagram_cookies.txt:ro
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=300m
@@ -21,4 +25,5 @@ services:
     pids_limit: 128
     mem_limit: 3g
 volumes:
+  recipe-importer-data:
   whisper-models:
