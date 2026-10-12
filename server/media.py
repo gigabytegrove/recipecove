@@ -2,31 +2,32 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import secrets
+import sys
 import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, UploadFile
 
 
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 MAX_UPLOAD = 80 * 1024 * 1024
 MAX_SECONDS = 900
 MAX_EXTRACT_CHARS = 47000
 MAX_OCR_FRAMES = 18
-MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
+WHISPER_TIMEOUT_SECONDS = int(os.getenv("WHISPER_TIMEOUT_SECONDS", "780"))
+if not 60 <= WHISPER_TIMEOUT_SECONDS <= 3600:
+    raise ValueError("WHISPER_TIMEOUT_SECONDS must be between 60 and 3600")
+LOG = logging.getLogger(__name__)
 COOKIE_PATH = Path(os.getenv("INSTAGRAM_COOKIES_FILE", "/run/secrets/instagram_cookies.txt"))
 
 _pipeline_limit = threading.BoundedSemaphore(value=1)
-_whisper_lock = threading.Lock()
-_whisper_model: Any = None
 
 
 def validate_instagram_url(url: str) -> str:
@@ -70,32 +71,42 @@ def duration_of(path: Path) -> float:
 
 
 def transcribe_audio(path: Path) -> str:
-    global _whisper_model
-    # If media has no audio, ffmpeg returns a non-zero result and we still OCR.
-    with tempfile.TemporaryDirectory(prefix="bridge_audio_") as temp:
+    """Isolate the memory-heavy speech model in a disposable child process.
+
+    The API server never imports faster_whisper or retains the model after a
+    request. When the child exits, the OS reclaims its address space even if
+    the underlying native inference libraries retain memory internally.
+    """
+    with tempfile.TemporaryDirectory(prefix="ri_audio_") as temp:
         audio = Path(temp) / "speech.wav"
-        result = subprocess.run([
-            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", str(audio)
-        ], capture_output=True, timeout=120, check=False)
+        try:
+            result = subprocess.run([
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                "-threads", "1", "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", str(audio)
+            ], capture_output=True, timeout=120, check=False)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise RuntimeError("Could not prepare video audio") from exc
         if result.returncode != 0 or not audio.exists() or audio.stat().st_size < 1024:
             return ""
         try:
-            from faster_whisper import WhisperModel
-        except ImportError as exc:
-            raise RuntimeError("Speech engine not installed") from exc
-        with _whisper_lock:
-            if _whisper_model is None:
-                _whisper_model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8", download_root="/models")
-        segments, _ = _whisper_model.transcribe(str(audio), vad_filter=True, beam_size=3)
-        return " ".join(segment.text.strip() for segment in segments if segment.text.strip())[:MAX_EXTRACT_CHARS]
+            transcription = subprocess.run([
+                sys.executable, str(Path(__file__).with_name("transcribe_worker.py")), str(audio)
+            ], capture_output=True, text=True, timeout=WHISPER_TIMEOUT_SECONDS, check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("Speech recognition exceeded the configured processing timeout") from exc
+        except OSError as exc:
+            raise RuntimeError("Could not start speech recognition") from exc
+        if transcription.returncode != 0:
+            LOG.warning("Whisper worker exited with status %d", transcription.returncode)
+            raise RuntimeError("Speech recognition worker failed; check memory limit and Whisper model")
+        return transcription.stdout.strip()[:MAX_EXTRACT_CHARS]
 
 
 def ocr_video(path: Path, workdir: Path) -> str:
     frames = workdir / "frames"
     frames.mkdir()
     run_command([
-        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(path),
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-threads", "1", "-i", str(path),
         "-vf", "select='isnan(prev_selected_t)+gte(t-prev_selected_t,12)',scale='min(960,iw)':-2",
         "-fps_mode", "vfr", "-frames:v", str(MAX_OCR_FRAMES),
         str(frames / "frame_%03d.png")
@@ -119,12 +130,14 @@ def process_video(path: Path, workdir: Path, caption: str = "", source_url: str 
     limitations: list[str] = []
     try:
         speech = transcribe_audio(path)
-    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError):
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+        LOG.warning("Speech extraction unavailable: %s", exc)
         speech = ""
         limitations.append("Speech recognition failed; check Whisper model/network access")
     try:
         visible = ocr_video(path, workdir)
-    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError):
+    except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+        LOG.warning("Video OCR unavailable: %s", exc)
         visible = ""
         limitations.append("On-screen text recognition failed")
     caption = caption.strip()[:20000]

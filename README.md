@@ -1,4 +1,4 @@
-# Recipe Importer 1.1.0
+# Recipe Importer 1.1.1
 
 **One Docker container. One native Android app. Direct KitchenOwl integration. No KO-Pellet or bridge.**
 
@@ -28,7 +28,7 @@ docker compose up -d --build
 curl -f http://127.0.0.1:8999/health
 ```
 
-The startup health endpoint returns a JSON object with `status: ok` and `version: 1.1.0`. If your selected address is not `127.0.0.1`, change the `curl` address accordingly. Open `http://YOUR-HOST:8999` to access the included browser importer. Sign in with your KitchenOwl credentials. The server does **not** require KO-Pellet and does not connect to it.
+The startup health endpoint returns a JSON object with `status: ok` and `version: 1.1.1`. If your selected address is not `127.0.0.1`, change the `curl` address accordingly. Open `http://YOUR-HOST:8999` to access the included browser importer. Sign in with your KitchenOwl credentials. The server does **not** require KO-Pellet and does not connect to it.
 
 An optional GitHub Actions Docker publishing workflow builds an `amd64` image at `ghcr.io/gigabytegrove/recipe-importer:latest` on pushes to `main`. If your GHCR package is accessible to your Docker host, you can switch the compose service from `build: .` to `image: ghcr.io/gigabytegrove/recipe-importer:latest`, then future updates are simply:
 
@@ -36,7 +36,20 @@ An optional GitHub Actions Docker publishing workflow builds an `amd64` image at
 docker compose pull && docker compose up -d
 ```
 
-You do not need to edit the compose file for each software version. GHCR package accessibility and workflow success must be verified before relying on the published image. The source-build command above always works without GHCR. The container persists its sessions database and Whisper model downloads in named volumes; rebuilds keep those volumes. Back up the `recipe-importer-data` Docker volume, which includes active session tokens.
+You do not need to edit the compose file for each software version. GHCR package accessibility and workflow success must be verified before relying on the published image. The source-build command above always works without GHCR. The container persists its sessions database and Whisper model downloads in named volumes; rebuilds keep those volumes. Back up the `recipe-importer-data` Docker volume, which includes active session tokens. The separate `recipe-importer-temp` volume keeps media-processing files on **disk rather than RAM-backed tmpfs**. Temporary files are removed after each completed operation.
+
+### Low-memory operation (default)
+
+The default Compose service is designed for a shared 16 GB Docker host, even as more services are consolidated onto it:
+
+- **1 CPU maximum**, **1536 MiB container memory limit** and **no container swap**. These are limits, not idle allocations. No GPU is needed.
+- `base` Whisper, INT8 CPU inference with **one inference thread**. It starts in a **temporary subprocess for each video** and fully exits when transcription completes. There is no Whisper model loaded in RAM while the server is idle.
+- **One video at a time**; simultaneous requests receive HTTP 429 rather than multiplying memory usage.
+- Temporary media/frames/WAVs use the disk-backed `recipe-importer-temp` volume, *not* tmpfs. The volume may contain stale files after a hard crash; it can be cleaned while the container is stopped if needed.
+- Transcription may be slow on one CPU. The default speech timeout is 780 seconds; if it exceeds that limit, the importer still tries caption and OCR extraction, and flags missing speech in the editable preview. Very long or difficult clips may exceed this budget.
+- The model is downloaded once into the persisted `/models` volume. Persistent storage usage is separate from RAM usage.
+
+The 1536 MiB limit is a **safety ceiling**, not a measured peak or a performance guarantee. For unusually complex videos, the model process can fail due to the limit; the server remains available and warns that the audio could not be transcribed. Start with the defaults and observe `docker stats recipe-importer` during a real Reel import. If inference regularly fails, try `WHISPER_MODEL=tiny` to reduce footprint, or adjust the limit after examining actual usage.
 
 ### Required settings
 
@@ -95,4 +108,4 @@ python -m pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.1.0, intended for testing and verification on your network before migrating all recipe imports.
+Unit and API tests mock KitchenOwl and Instagram to avoid network dependencies. `test_short_video_ocr` additionally performs a real short-video OCR test when the relevant host utilities are installed. There are no hardcoded credentials in source. This is version 1.1.1, intended for testing and verification on your network before migrating all recipe imports.

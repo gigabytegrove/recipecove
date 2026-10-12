@@ -8,22 +8,30 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_TIMEOUT_SECONDS: ${WHISPER_TIMEOUT_SECONDS:-780}
+      OMP_NUM_THREADS: "1"
+      OMP_THREAD_LIMIT: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      TOKENIZERS_PARALLELISM: "false"
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8999}:8999"
     volumes:
       - recipe-importer-data:/data
       - whisper-models:/models
+      - recipe-importer-temp:/tmp
       # Optional authorized Instagram cookie export:
       # - ./instagram_cookies.txt:/run/secrets/instagram_cookies.txt:ro
-    tmpfs:
-      - /tmp:rw,nosuid,nodev,size=300m
     read_only: true
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    pids_limit: 128
-    mem_limit: 3g
+    pids_limit: 64
+    cpus: 1.0
+    mem_limit: 1536m
+    memswap_limit: 1536m
 volumes:
   recipe-importer-data:
   whisper-models:
+  recipe-importer-temp:
