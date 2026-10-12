@@ -19,7 +19,7 @@ import media
 import recipes
 import settings_store
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -228,8 +228,16 @@ async def parse_text(body: recipes.ParseRequest, token: str = Depends(token_from
 async def parse_url(body: recipes.ParseRequest, token: str = Depends(token_from_header)):
     if not body.url: raise HTTPException(422, "Missing URL")
     try:
+        platform = media.social_provider(body.url)
+        if platform:
+            extractor = media.extract_facebook if platform == "facebook" else media.extract_instagram
+            info = await run_in_threadpool(media.run_exclusive, extractor, body.url)
+            return await _complete_media(info, platform)
         html, source = await recipes.page_html(body.url)
-        return recipes.parse_document(html, source)
+        parsed = recipes.parse_document(html, source)
+        if not parsed.ingredients and not parsed.instructions:
+            raise ValueError("This webpage did not expose recipe ingredients or directions. Paste the recipe text or share a screenshot instead.")
+        return parsed
     except ValueError as exc: raise HTTPException(422, str(exc)) from exc
 
 
@@ -248,6 +256,13 @@ async def parse_image(file: UploadFile = File(...), token: str = Depends(token_f
 async def _complete_media(info: dict, source_type: str) -> recipes.Recipe:
     result = await recipes.parse_text(info["text"], source_url=info.get("source_url", ""), source_type=source_type)
     warning = info.get("warning", "")
+    result.evidence = info["text"][:recipes.MAX_TEXT]
+    if not (result.ingredients or result.instructions):
+        result.requires_manual_review = True
+        result.confidence = "low"
+        warning = "Video/post was read, but no structured ingredients or instructions were recognized. Review the extracted source text and enter missing details before saving. " + warning
+        # Legacy Android apps have no dedicated source-text panel yet.
+        result.notes = (result.notes + "\n\n" if result.notes else "") + "Extracted source text (edit/remove before saving):\n" + result.evidence[:18000]
     result.notes = (result.notes + "\n\n" if result.notes else "") + warning
     if "ingredients" not in result.fields_needing_review: result.fields_needing_review.append("ingredients")
     if "instructions" not in result.fields_needing_review: result.fields_needing_review.append("instructions")
@@ -262,6 +277,16 @@ async def parse_instagram(body: ReelBody, token: str = Depends(token_from_header
         raise HTTPException(422, str(exc)) from exc
     info = await run_in_threadpool(media.run_exclusive, media.extract_instagram, source)
     return await _complete_media(info, "instagram")
+
+
+@app.post("/api/parse/facebook", response_model=recipes.Recipe)
+async def parse_facebook(body: ReelBody, token: str = Depends(token_from_header)):
+    try:
+        source = media.validate_facebook_url(body.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    info = await run_in_threadpool(media.run_exclusive, media.extract_facebook, source)
+    return await _complete_media(info, "facebook")
 
 
 @app.post("/api/parse/video", response_model=recipes.Recipe)
