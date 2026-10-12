@@ -18,16 +18,16 @@ from typing import Any
 
 import httpx
 from fastapi import HTTPException
+import settings_store
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
-KITCHENOWL_URL = os.getenv("KITCHENOWL_URL", "").rstrip("/")
+
 _LOCK = threading.RLock()
 _TOKEN_REFRESH_GUARD = asyncio.Lock()
 
 
 def initialize() -> None:
-    if not KITCHENOWL_URL.startswith(("https://", "http://")):
-        raise RuntimeError("Set KITCHENOWL_URL to the full URL of your KitchenOwl instance")
+    settings_store.initialize()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(DATA_DIR, 0o700)
     with _db() as conn:
@@ -40,6 +40,8 @@ def initialize() -> None:
             username TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions(expires_at)")
+        conn.execute("CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at REAL NOT NULL)")
+    os.chmod(DATA_DIR / "sessions.sqlite3", 0o600)
 
 
 def _db():
@@ -59,9 +61,11 @@ def _client() -> httpx.AsyncClient:
 async def login(username: str, password: str) -> str:
     if not (1 <= len(username) <= 200 and 1 <= len(password) <= 1024):
         raise HTTPException(400, "Enter a username and password")
+    if not settings_store.configured():
+        raise HTTPException(503, "Finish the setup wizard before signing in")
     try:
         async with _client() as client:
-            response = await client.post(f"{KITCHENOWL_URL}/api/auth", json={
+            response = await client.post(f"{settings_store.kitchenowl_url()}/api/auth", json={
                 "username": username, "password": password, "device": "Recipe Importer"
             })
     except httpx.HTTPError as exc:
@@ -89,12 +93,30 @@ async def login(username: str, password: str) -> str:
 def logout(token: str) -> None:
     with _LOCK, _db() as conn:
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_key(token),))
+        conn.execute("DELETE FROM admin_sessions WHERE token_hash = ?", (_key(token),))
+
+
+def create_admin_session() -> str:
+    token = secrets.token_urlsafe(48)
+    with _LOCK, _db() as conn:
+        conn.execute("DELETE FROM admin_sessions WHERE expires_at < ?", (time.time(),))
+        conn.execute("INSERT INTO admin_sessions VALUES (?, ?)", (_key(token), time.time() + 30 * 86400))
+    return token
+
+
+def clear_user_sessions() -> None:
+    with _LOCK, _db() as conn:
+        conn.execute("DELETE FROM sessions")
 
 
 def session_info(token: str) -> dict:
     if not token or len(token) > 256:
         raise HTTPException(401, "Authentication required")
     with _LOCK, _db() as conn:
+        admin = conn.execute("SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND expires_at > ?",
+                             (_key(token), time.time())).fetchone()
+        if admin is not None:
+            return {"username": "Administrator", "is_admin": True}
         entry = conn.execute("SELECT * FROM sessions WHERE token_hash = ? AND expires_at > ?",
                              (_key(token), time.time())).fetchone()
     if entry is None:
@@ -107,6 +129,8 @@ async def kitchenowl_request(token: str, method: str, path: str, *, payload: dic
     if not re.fullmatch(r"/api/[a-zA-Z0-9/_-]+", path):
         raise HTTPException(400, "Invalid KitchenOwl API path")
     session = session_info(token)
+    if session.get("is_admin"):
+        return await _admin_kitchenowl_request(method, path, payload=payload, params=params)
     if session["ko_expires_at"] - time.time() < 90:
         # A serialized refresh guards against two simultaneous refresh requests rotating the same token.
         async with _TOKEN_REFRESH_GUARD:
@@ -117,7 +141,7 @@ async def kitchenowl_request(token: str, method: str, path: str, *, payload: dic
                     raise HTTPException(401, "KitchenOwl session expired; sign in again")
                 try:
                     async with _client() as client:
-                        resp = await client.get(f"{KITCHENOWL_URL}/api/auth/refresh",
+                        resp = await client.get(f"{settings_store.kitchenowl_url()}/api/auth/refresh",
                                                 headers={"Authorization": f"Bearer {refresh}"})
                 except httpx.HTTPError as exc:
                     raise HTTPException(502, "Cannot reach KitchenOwl token refresh") from exc
@@ -138,13 +162,35 @@ async def kitchenowl_request(token: str, method: str, path: str, *, payload: dic
                 session = session_info(token)
     try:
         async with _client() as client:
-            response = await client.request(method, f"{KITCHENOWL_URL}{path}",
+            response = await client.request(method, f"{settings_store.kitchenowl_url()}{path}",
                                             headers={"Authorization": f"Bearer {session['access_token']}"},
                                             json=payload, params=params)
     except httpx.HTTPError as exc:
         raise HTTPException(502, "Cannot reach KitchenOwl") from exc
     if response.status_code == 401:
         raise HTTPException(401, "KitchenOwl rejected the session; reconnect this device")
+    if response.status_code >= 400:
+        raise HTTPException(502, f"KitchenOwl returned HTTP {response.status_code}")
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(502, "KitchenOwl returned invalid JSON") from exc
+
+
+
+async def _admin_kitchenowl_request(method: str, path: str, *, payload: dict | None = None,
+                                    params: dict | None = None) -> Any:
+    if not settings_store.configured():
+        raise HTTPException(503, "Setup is required")
+    try:
+        async with _client() as client:
+            response = await client.request(method, settings_store.kitchenowl_url() + path,
+                headers={"Authorization": "Bearer " + settings_store.kitchenowl_llt()},
+                json=payload, params=params)
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, "Cannot reach KitchenOwl") from exc
+    if response.status_code in (401, 403):
+        raise HTTPException(401, "KitchenOwl rejected the configured LLT; reconnect in Settings")
     if response.status_code >= 400:
         raise HTTPException(502, f"KitchenOwl returned HTTP {response.status_code}")
     try:

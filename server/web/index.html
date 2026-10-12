@@ -11,9 +11,27 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 .error{color:#b12336}.success{color:#21754e}.caption{font-size:.86rem;color:#687d8c;margin-top:8px}#message{min-height:24px;font-size:.92rem;font-weight:600}small{color:#72808b}
 @media(max-width:700px){.split{grid-template-columns:1fr}.shell{padding:20px 12px}.card{padding:16px}}
 </style></head><body><div class="shell">
-<header><div class="brand">🍲 Recipe <span>Importer</span></div><button id="logout" class="secondary hidden">Disconnect</button></header>
+<header><div class="brand">🍲 Recipe <span>Importer</span></div><div><button id="settings-button" class="secondary hidden" type="button">Settings</button> <button id="logout" class="secondary hidden">Disconnect</button></div></header>
 <div id="message" role="status" aria-live="polite"></div>
-<section id="login" class="card"><h1>Connect to KitchenOwl</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household.</p>
+<section id="setup" class="card hidden"><h1>Welcome to Recipe Importer</h1><p class="muted">First-time setup. Connect your existing KitchenOwl installation without editing Docker settings. Your URL and long-lived token are saved in the persistent container volume.</p>
+<form id="setup-form">
+<label for="setup-code">One-time setup code</label><input id="setup-code" type="password" autocomplete="off" required placeholder="Find this in the Recipe Importer container logs"><p class="caption">Find “first-run setup code” in the Docker container logs. It prevents another device from claiming your installation.</p>
+<label for="setup-url">KitchenOwl server URL</label><input id="setup-url" type="url" placeholder="http://192.168.0.50:8080" required>
+<label for="setup-llt">KitchenOwl long-lived token (LLT)</label><input id="setup-llt" type="password" autocomplete="off" required><p class="caption">Create a long-lived token in KitchenOwl and paste it here. It stays on your Recipe Importer server, not on the phone.</p>
+<label for="setup-password">Recipe Importer administrator password (12+ characters)</label><input id="setup-password" type="password" minlength="12" autocomplete="new-password" required>
+<h3>Optional AI recipe parsing</h3><label for="setup-ai-key">OpenAI API key (optional)</label><input id="setup-ai-key" type="password" autocomplete="off"><p class="caption">Without an API key, website parsing, local speech transcription, and OCR still work; messy transcripts may need manual editing.</p>
+<div class="row"><button id="setup-test" type="button" class="secondary">Test connection</button><button id="setup-save" type="submit">Connect &amp; finish setup</button></div>
+</form></section>
+<section id="admin-settings" class="card hidden"><h1>Server settings</h1><p class="muted">Connection settings are stored privately in the persistent data volume. Leave the token and AI key blank to keep their existing values.</p>
+<form id="admin-settings-form"><label for="admin-url">KitchenOwl URL</label><input id="admin-url" required type="url">
+<label for="admin-llt">Replace KitchenOwl LLT</label><input id="admin-llt" type="password" autocomplete="off" placeholder="Leave blank to keep current token">
+<label for="admin-ai-key">Replace OpenAI API key</label><input id="admin-ai-key" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
+<label for="admin-ai-model">OpenAI model</label><input id="admin-ai-model" required>
+<label for="admin-password-change">New administrator password (optional)</label><input id="admin-password-change" type="password" minlength="12" autocomplete="new-password" placeholder="Leave blank to keep current password">
+<div class="row"><button type="submit">Save and verify connection</button><button id="settings-close" class="secondary" type="button">Back to importer</button></div></form></section>
+<section id="admin-login" class="card hidden"><h1>Administrator sign-in</h1><p class="muted">Use the administrator password created during Recipe Importer setup.</p>
+<form id="admin-login-form"><label for="admin-login-password">Administrator password</label><input id="admin-login-password" type="password" autocomplete="current-password" required><button type="submit">Sign in</button></form></section>
+<section id="login" class="card hidden"><h1>KitchenOwl account sign-in</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household. Administrators may use the sign-in above instead.</p>
 <form id="login-form"><label for="username">Username</label><input id="username" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Connect</button></form></section>
 <div id="workspace" class="hidden"><section class="card"><div class="row"><div><h2>Import a recipe</h2><p class="muted">Paste a recipe page, Instagram Reel URL, or recipe text. Nothing saves until you approve it.</p></div><div><label for="household">Save to household</label><select id="household"></select></div></div>
 <label for="source">Link or recipe text</label><textarea id="source" placeholder="Paste any recipe URL, Instagram Reel, or ingredients and instructions..."></textarea>
@@ -25,10 +43,10 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-let token = sessionStorage.getItem('ri_token') || '', current = null, busy = false;
+let token = sessionStorage.getItem('ri_token') || '', current = null, busy = false, admin = false;
 const fields = ['title','description','ingredients','instructions','servings','notes','prep','cook','total','url'];
 function message(text, kind=''){ $('message').textContent=text; $('message').className=kind; }
-function connected(yes){$('login').classList.toggle('hidden',yes);$('workspace').classList.toggle('hidden',!yes);$('logout').classList.toggle('hidden',!yes);}
+function connected(yes, isAdmin=false){admin=Boolean(yes&&isAdmin);$('login').classList.toggle('hidden',yes);$('admin-login').classList.toggle('hidden',yes);$('workspace').classList.toggle('hidden',!yes);$('logout').classList.toggle('hidden',!yes);$('settings-button').classList.toggle('hidden',!admin);$('setup').classList.add('hidden');$('admin-settings').classList.add('hidden');}
 async function api(path,options={}){
   const r=await fetch(path,{...options,headers:{...(options.headers||{}), Authorization:'Bearer '+token}});
   const body=await r.json().catch(()=>({})); if(!r.ok)throw Error(body.detail||'Server returned '+r.status); return body;
@@ -42,7 +60,7 @@ async function load(){
 }
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();message('Connecting…');
  try{const r=await fetch('/api/auth/kitchenowl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});
- const data=await r.json();if(!r.ok)throw Error(data.detail||'Login failed'); token=data.token; sessionStorage.setItem('ri_token',token);$('password').value='';connected(true);await load();message('Connected to KitchenOwl.','success');}
+ const data=await r.json();if(!r.ok)throw Error(data.detail||'Login failed'); token=data.token; sessionStorage.setItem('ri_token',token);$('password').value='';connected(true,false);await load();message('Connected to KitchenOwl.','success');}
  catch(err){message(err.message,'error');}});
 $('logout').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}catch(_){}token='';sessionStorage.removeItem('ri_token');current=null;$('preview').classList.add('hidden');connected(false);message('Disconnected.');});
 function recipeFields(data){current=data;$('title').value=data.title||'';$('description').value=data.description||'';$('servings').value=data.servings||'';
@@ -79,5 +97,21 @@ $('save').addEventListener('click',async()=>{if(busy||!current)return;disabled(t
  current=null;$('preview').classList.add('hidden');$('upload').value='';$('source').value='';message('Recipe successfully saved to KitchenOwl.','success');
  }catch(err){message(err.message,'error');}finally{disabled(false);}
 });
-if(token){api('/api/auth/status').then(()=>{connected(true);return load()}).catch(()=>{sessionStorage.removeItem('ri_token');token='';connected(false)});}
+async function boot(){
+ try{
+  const state=await fetch('/api/setup/status',{cache:'no-store'}).then(r=>r.json());
+  if(!state.configured){token='';sessionStorage.removeItem('ri_token');$('setup').classList.remove('hidden');return;}
+  if(token){try{const status=await api('/api/auth/status');connected(true,status.is_admin);await load();return;}catch(_){token='';sessionStorage.removeItem('ri_token');}}
+  connected(false);
+ }catch(err){message('Cannot reach Recipe Importer: '+err.message,'error');}
+}
+async function setupRequest(endpoint, data){const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const body=await r.json().catch(()=>({}));if(!r.ok)throw Error(body.detail||('Request failed: '+r.status));return body;}
+function setupPayload(){return {setup_code:$('setup-code').value.trim(),kitchenowl_url:$('setup-url').value.trim(),kitchenowl_llt:$('setup-llt').value.trim()};}
+$('setup-test').addEventListener('click',async()=>{try{message('Testing KitchenOwl connection…');const result=await setupRequest('/api/setup/test',setupPayload());message('Connection successful. '+result.households+' household(s) found.','success');}catch(err){message(err.message,'error');}});
+$('setup-form').addEventListener('submit',async e=>{e.preventDefault();$('setup-save').disabled=true;try{message('Verifying and saving KitchenOwl connection…');const result=await setupRequest('/api/setup/complete',{...setupPayload(),admin_password:$('setup-password').value,openai_api_key:$('setup-ai-key').value,openai_model:'gpt-4o-mini'});token=result.token;sessionStorage.setItem('ri_token',token);$('setup-code').value='';$('setup-llt').value='';$('setup-password').value='';$('setup-ai-key').value='';connected(true,true);await load();message('Setup complete. You can now import recipes.','success');}catch(err){message(err.message,'error');}finally{$('setup-save').disabled=false;}});
+$('admin-login-form').addEventListener('submit',async e=>{e.preventDefault();try{message('Signing in…');const data=await setupRequest('/api/admin/login',{password:$('admin-login-password').value});token=data.token;sessionStorage.setItem('ri_token',token);$('admin-login-password').value='';connected(true,true);await load();message('Administrator connected.','success');}catch(err){message(err.message,'error');}});
+$('settings-button').addEventListener('click',async()=>{try{const status=await api('/api/admin/settings');$('admin-url').value=status.kitchenowl_url;$('admin-ai-model').value=status.openai_model;$('admin-llt').value='';$('admin-ai-key').value='';$('admin-password-change').value='';$('admin-settings').classList.remove('hidden');$('workspace').classList.add('hidden');message('');}catch(err){message(err.message,'error');}});
+$('settings-close').addEventListener('click',()=>{$('admin-settings').classList.add('hidden');$('workspace').classList.remove('hidden');});
+$('admin-settings-form').addEventListener('submit',async e=>{e.preventDefault();try{message('Testing and saving connection…');const req={kitchenowl_url:$('admin-url').value.trim(),kitchenowl_llt:$('admin-llt').value.trim(),openai_model:$('admin-ai-model').value.trim()};if($('admin-ai-key').value.trim())req.openai_api_key=$('admin-ai-key').value.trim();if($('admin-password-change').value)req.new_admin_password=$('admin-password-change').value;await api('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});$('admin-llt').value='';$('admin-ai-key').value='';$('admin-password-change').value='';$('admin-settings').classList.add('hidden');$('workspace').classList.remove('hidden');await load();message('Server configuration saved and verified.','success');}catch(err){message(err.message,'error');}});
+boot();
 </script></body></html>

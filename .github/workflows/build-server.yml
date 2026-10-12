@@ -43,9 +43,9 @@ jobs:
           platforms: linux/amd64
           tags: |
             ghcr.io/gigabytegrove/recipe-importer:latest
-            ghcr.io/gigabytegrove/recipe-importer:1.1.1
+            ghcr.io/gigabytegrove/recipe-importer:1.2.0
           labels: |
             org.opencontainers.image.source=https://github.com/gigabytegrove/recipe-importer
-            org.opencontainers.image.version=1.1.1
+            org.opencontainers.image.version=1.2.0
           cache-from: type=gha
           cache-to: type=gha,mode=max

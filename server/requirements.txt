@@ -7,3 +7,4 @@ pydantic==2.11.3
 pillow==11.2.1
 faster-whisper==1.1.1
 yt-dlp>=2026.1.1,<2027
+cryptography>=43,<48

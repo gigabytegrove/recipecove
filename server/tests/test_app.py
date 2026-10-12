@@ -11,13 +11,13 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-os.environ['KITCHENOWL_URL'] = 'http://127.0.0.1:8765'
 os.environ['DATA_DIR'] = tempfile.mkdtemp(prefix='recipe_importer_test_')
 
 import app
 import kitchenowl
 import media
 import recipes
+import settings_store
 
 TOKEN = 's' * 48
 HEADERS = {'Authorization': 'Bearer ' + TOKEN}
@@ -25,13 +25,13 @@ HEADERS = {'Authorization': 'Bearer ' + TOKEN}
 
 @pytest.fixture
 def client():
-    with TestClient(app.app) as c:
+    with TestClient(app.app) as c, patch.object(settings_store, "_config", {"kitchenowl_url": "http://127.0.0.1:8765", "llt": "testing-token-1234567890123456", "password_hash": "test"}):
         yield c
 
 
 def test_health_and_web(client):
     r = client.get('/health')
-    assert r.json()['version'] == '1.1.1'
+    assert r.json()['version'] == '1.2.0'
     web = client.get('/')
     assert web.status_code == 200
     assert 'Recipe Importer' in web.text
@@ -62,7 +62,7 @@ def test_login_token_and_logout(client):
 
 def test_sessions_persist_and_logout():
     kitchenowl.initialize()
-    with patch.object(kitchenowl, '_client') as factory:
+    with patch.object(settings_store, '_config', {'kitchenowl_url': 'http://127.0.0.1:8765', 'llt':'example-123456789012', 'password_hash': 'test'}), patch.object(kitchenowl, '_client') as factory:
         import httpx
         transport = httpx.MockTransport(lambda req: httpx.Response(200, json={
             'access_token': 'a' * 32,'refresh_token': 'b' * 32

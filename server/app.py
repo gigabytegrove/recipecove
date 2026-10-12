@@ -17,8 +17,9 @@ from starlette.concurrency import run_in_threadpool
 import kitchenowl
 import media
 import recipes
+import settings_store
 
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -38,6 +39,33 @@ class LoginBody(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class SetupBody(BaseModel):
+    setup_code: str = Field(min_length=1, max_length=128)
+    kitchenowl_url: str = Field(min_length=7, max_length=2048)
+    kitchenowl_llt: str = Field(min_length=12, max_length=4096)
+    admin_password: str = Field(min_length=12, max_length=1024)
+    openai_api_key: str = Field(default="", max_length=2048)
+    openai_model: str = Field(default="gpt-4o-mini", min_length=2, max_length=80)
+
+
+class ConnectionCheck(BaseModel):
+    setup_code: str = Field(default="", max_length=128)
+    kitchenowl_url: str = Field(min_length=7, max_length=2048)
+    kitchenowl_llt: str = Field(min_length=12, max_length=4096)
+
+
+class AdminLogin(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class AdminSettings(BaseModel):
+    kitchenowl_url: str = Field(min_length=7, max_length=2048)
+    kitchenowl_llt: str = Field(default="", max_length=4096)
+    openai_api_key: str | None = Field(default=None, max_length=2048)
+    openai_model: str | None = Field(default=None, max_length=80)
+    new_admin_password: str | None = Field(default=None, max_length=1024)
+
+
 class RecipeBody(BaseModel):
     recipe: recipes.Recipe
 
@@ -50,7 +78,15 @@ def token_from_header(authorization: Annotated[str | None, Header()] = None) -> 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Sign in to Recipe Importer", headers={"WWW-Authenticate": "Bearer"})
     token = authorization[7:]
+    if not settings_store.configured():
+        raise HTTPException(503, "Complete the setup wizard first")
     kitchenowl.session_info(token)
+    return token
+
+
+def require_admin(token: str = Depends(token_from_header)) -> str:
+    if not kitchenowl.session_info(token).get("is_admin"):
+        raise HTTPException(403, "Administrator access required")
     return token
 
 
@@ -70,7 +106,7 @@ def guard_login(ip: str) -> None:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": VERSION, "kitchenowl_configured": bool(kitchenowl.KITCHENOWL_URL)}
+    return {"status": "ok", "version": VERSION, "kitchenowl_configured": settings_store.configured()}
 
 
 @app.get("/")
@@ -78,6 +114,65 @@ def home():
     return FileResponse(DATA / "web" / "index.html", media_type="text/html", headers={
         "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
         "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"})
+
+
+@app.get("/api/setup/status")
+def setup_status():
+    return settings_store.public_status()
+
+
+@app.post("/api/setup/test")
+async def setup_test(body: ConnectionCheck, request: Request):
+    guard_login(request.client.host if request.client else "unknown")
+    settings_store.check_claim(body.setup_code)
+    return await settings_store.test_connection(body.kitchenowl_url, body.kitchenowl_llt)
+
+
+@app.post("/api/setup/complete")
+async def setup_complete(body: SetupBody, request: Request):
+    guard_login(request.client.host if request.client else "unknown")
+    settings_store.check_claim(body.setup_code)
+    tested = await settings_store.test_connection(body.kitchenowl_url, body.kitchenowl_llt)
+    # Serialize concurrent claims. Recheck under the store lock to prevent double initialization.
+    with settings_store._LOCK:
+        settings_store.check_claim(body.setup_code)
+        settings_store.save(url=body.kitchenowl_url, llt=body.kitchenowl_llt,
+                            admin_password=body.admin_password, ai_key=body.openai_api_key,
+                            ai_model_name=body.openai_model)
+        kitchenowl.clear_user_sessions()
+        token = kitchenowl.create_admin_session()
+    return {"success": True, "connected": tested["connected"], "token": token}
+
+
+@app.post("/api/admin/login")
+async def admin_login(body: AdminLogin, request: Request):
+    guard_login(request.client.host if request.client else "unknown")
+    if not settings_store.configured():
+        raise HTTPException(503, "Complete the setup wizard first")
+    if not settings_store.password_valid(body.password):
+        raise HTTPException(401, "Incorrect administrator password")
+    return {"success": True, "token": kitchenowl.create_admin_session()}
+
+
+@app.get("/api/admin/settings")
+def admin_settings(token: str = Depends(require_admin)):
+    return settings_store.admin_status()
+
+
+@app.post("/api/admin/test")
+async def admin_test(body: ConnectionCheck, token: str = Depends(require_admin)):
+    return await settings_store.test_connection(body.kitchenowl_url, body.kitchenowl_llt)
+
+
+@app.post("/api/admin/settings")
+async def update_settings(body: AdminSettings, token: str = Depends(require_admin)):
+    llt = body.kitchenowl_llt.strip() or settings_store.kitchenowl_llt()
+    result = await settings_store.test_connection(body.kitchenowl_url, llt)
+    settings_store.save(url=body.kitchenowl_url, llt=llt, ai_key=body.openai_api_key,
+                        ai_model_name=body.openai_model,
+                        admin_password=body.new_admin_password or None)
+    kitchenowl.clear_user_sessions()  # Changed KitchenOwl URLs must not leave stale user sessions.
+    return {"success": True, "connected": result["connected"]}
 
 
 @app.post("/api/auth/kitchenowl")
@@ -90,7 +185,7 @@ async def login(body: LoginBody, request: Request):
 @app.get("/api/auth/status")
 def status(token: str = Depends(token_from_header)):
     session = kitchenowl.session_info(token)
-    return {"authenticated": True, "user": session["username"]}
+    return {"authenticated": True, "user": session["username"], "is_admin": bool(session.get("is_admin"))}
 
 
 @app.post("/api/auth/logout")
