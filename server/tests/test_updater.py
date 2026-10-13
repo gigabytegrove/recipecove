@@ -79,7 +79,7 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'2.2.6' in result['app.py']
+    assert result['app.py'] and b'2.2.7' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))
