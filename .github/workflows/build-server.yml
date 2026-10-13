@@ -1,4 +1,4 @@
-name: Test and publish Forknook Docker
+name: Test and publish RecipeCove Docker
 on:
   workflow_dispatch:
   push:
@@ -51,8 +51,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/gigabytegrove/forknook:latest
-            ghcr.io/gigabytegrove/forknook:${{ steps.version.outputs.version }}
+            ghcr.io/gigabytegrove/recipecove:latest
+            ghcr.io/gigabytegrove/recipecove:${{ steps.version.outputs.version }}
           labels: |
             org.opencontainers.image.source=https://github.com/gigabytegrove/forknook
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
@@ -76,8 +76,10 @@ jobs:
           (cd server && tar -czf "../dist/forknook-server-${VERSION}.tar.gz" \
             --exclude='__pycache__' \
             *.py web requirements.txt Dockerfile update_release.json)
-          sha256sum "dist/forknook-server-${VERSION}.tar.gz" | awk '{print $1}' \
-            > "dist/forknook-server-${VERSION}.sha256"
+          cp "dist/forknook-server-${VERSION}.tar.gz" "dist/recipecove-server-${VERSION}.tar.gz"
+          sha256sum "dist/recipecove-server-${VERSION}.tar.gz" | awk '{print $1}' \
+            > "dist/recipecove-server-${VERSION}.sha256"
+          cp "dist/recipecove-server-${VERSION}.sha256" "dist/forknook-server-${VERSION}.sha256"
       - name: Publish a stable GitHub Release
         env:
           GH_TOKEN: ${{ secrets.FORKNOOK_RELEASE_TOKEN || github.token }}
@@ -88,7 +90,9 @@ jobs:
             echo "Release $TAG already exists; refusing to overwrite it."
             exit 1
           fi
-          gh release create "$TAG" "dist/forknook-server-${VERSION}.tar.gz" \
+          gh release create "$TAG" "dist/recipecove-server-${VERSION}.tar.gz" \
+            "dist/recipecove-server-${VERSION}.sha256" \
+            "dist/forknook-server-${VERSION}.tar.gz" \
             "dist/forknook-server-${VERSION}.sha256" \
-            --target "$GITHUB_SHA" --title "Forknook $TAG" \
+            --target "$GITHUB_SHA" --title "RecipeCove $TAG" \
             --notes "Server code and UI update. Python dependencies, launcher and Docker image changes still require a container redeploy."
