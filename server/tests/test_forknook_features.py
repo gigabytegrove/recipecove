@@ -266,3 +266,25 @@ def test_updater_reports_runtime_and_docker_versions(family):
     assert response.status_code==200
     assert response.json()['running_version']=='2.2.3'
     assert 'image_version' in response.json()
+
+
+def test_kitchenowl_markdown_sections_survive_migration():
+    source = {
+        'name': 'Herbed Chicken',
+        'description': 'Family favorite\\n\\n## Ingredients\\n- 3 tablespoons honey\\n- 2 chicken breasts\\n\\n## Instructions\\n1. Stir honey.\\n2. Bake chicken.\\n\\n## Notes\\nServe warm.'
+    }
+    parsed = ext._ko_recipe(source)
+    assert parsed.description == 'Family favorite'
+    assert len(parsed.ingredients) == 2
+    assert parsed.instructions == ['Stir honey.', 'Bake chicken.']
+    assert 'Serve warm.' in parsed.notes
+
+
+def test_shopping_ingredient_clean_labels():
+    cases = (
+        ('3 tablespoons Hot Honey (optional)', ('Hot Honey', '3 Tbsp')),
+        ('2 tsp paprika', ('paprika', '2 tsp')),
+        ({'name':'3 cups flour','raw':'3 cups flour'}, ('flour','3 cups')),
+    )
+    for raw, expected in cases:
+        assert base.shopping_ingredient(raw) == expected
