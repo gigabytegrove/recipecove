@@ -116,7 +116,7 @@ async function viewRecipe(id,{push=true}={}){
  }
  const actions=node('div',{class:'recipe-view-actions'},button('← All recipes',()=>navigate('recipes')),
   ...(model.user.role==='admin'||model.user.role==='approver'?[button('Edit recipe',()=>openEditor(id,null,{push:false}),'primary'),
-  ...(item.source_url&&/^https?:\\/\\//i.test(item.source_url)?[button('Recover from original source',async()=>{
+  ...(item.source_url&&/^https?:/i.test(item.source_url)?[button('Recover from original source',async()=>{
     if(!confirm('Read the original recipe website and prepare suggested corrections? Your saved recipe will not change until you review and save it.'))return;
     const preview=await api('/imports/preview-url',{method:'POST',data:{url:item.source_url}});
     const recoveredIngredients=Array.isArray(preview.ingredients)?preview.ingredients:[];
