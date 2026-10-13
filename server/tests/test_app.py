@@ -34,7 +34,7 @@ def test_health_and_web(client):
     assert r.json()['version'] == '2.3.0'
     web = client.get('/')
     assert web.status_code == 200
-    assert 'Forknook' in web.text
+    assert 'RecipeCove' in web.text
     assert 'KO-Pellet' not in web.text
     assert 'frame-ancestors' in web.headers['content-security-policy']
 
@@ -159,7 +159,7 @@ def test_short_video_ocr():
 def test_about_route_security_headers_and_unknown_route(client):
     about = client.get('/app/about')
     assert about.status_code == 200
-    assert 'Forknook' in about.text
+    assert 'RecipeCove' in about.text
     assert "style-src 'self'" in about.headers.get('content-security-policy','')
     assert client.get('/app/not-a-real-page').status_code == 404
 
