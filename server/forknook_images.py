@@ -106,9 +106,11 @@ def capture_url(raw: str) -> str:
     if LOCAL_IMAGE.fullmatch(raw):
         return raw
     url = _public_url(raw)
+    import outbound_security
+    pinned_url, pinned_headers, pinned_extensions = outbound_security.pinned_request(url)
     # Redirects are deliberately not followed to avoid redirect-to-LAN SSRF.
     with httpx.Client(timeout=httpx.Timeout(16, connect=6), trust_env=False, follow_redirects=False) as client:
-        with client.stream('GET', url, headers={'Accept':'image/jpeg,image/png,image/webp,image/*;q=0.7'}) as r:
+        with client.stream('GET', pinned_url, headers={'Accept':'image/jpeg,image/png,image/webp,image/*;q=0.7', **pinned_headers}, extensions=pinned_extensions) as r:
             r.raise_for_status()
             if not r.headers.get('content-type','').lower().startswith('image/'):
                 raise ValueError('The source did not return an image')
