@@ -181,7 +181,7 @@ def test_bookmarkable_pwa_routes_and_static_assets(client):
                  '/app/admin/backups', '/app/admin/updates', '/app/admin/ai'):
         resp=c.get(path)
         assert resp.status_code==200,(path,resp.text)
-        assert 'Forknook' in resp.text
+        assert 'RecipeCove' in resp.text
         assert resp.headers['cache-control']=='no-store'
     for path in ('/app/../../etc/passwd','/app/unknown','/app/admin/failure',
                  '/app/recipes/garbage','/app/shopping/wrong'):
