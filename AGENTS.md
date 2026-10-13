@@ -11,6 +11,11 @@ These constraints are requirements, not optional suggestions.
 - Every server/UI update must have tests for release discovery, checksum validation, safe archive handling, permission checks, restart, rollback, and URL-addressable update views.
 - Never discard named volumes or existing recipes, users, media, approvals, meal plans, and shopping lists.
 
+## Product version alignment
+- The web/PWA, server, and native Android app share one stable Forknook release number. Do not suffix one client with -alpha unless the owner specifically designates that release as pre-release.
+- Keep the Android versionCode monotonically increasing even when versionName is the same stable release; verify GitHub server and Android builds before marking published.
+- Versioned local Windows APK build instructions must be included with every Android change.
+
 ## Development discipline
 - Commit each completed, verified pass to GitHub main as directed by the project owner.
 - Run the entire backend and client build/test suites before declaring an update ready; a GitHub workflow failure blocks release readiness claims.
