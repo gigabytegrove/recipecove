@@ -271,7 +271,7 @@ def test_updater_reports_runtime_and_docker_versions(family):
 def test_kitchenowl_markdown_sections_survive_migration():
     source = {
         'name': 'Herbed Chicken',
-        'description': 'Family favorite\\n\\n## Ingredients\\n- 3 tablespoons honey\\n- 2 chicken breasts\\n\\n## Instructions\\n1. Stir honey.\\n2. Bake chicken.\\n\\n## Notes\\nServe warm.'
+        'description': 'Family favorite\n\n## Ingredients\n- 3 tablespoons honey\n- 2 chicken breasts\n\n## Instructions\n1. Stir honey.\n2. Bake chicken.\n\n## Notes\nServe warm.'
     }
     parsed = ext._ko_recipe(source)
     assert parsed.description == 'Family favorite'
