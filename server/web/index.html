@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recipe Importer</title><style>
+<title>RecipeCove</title><style>
 :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#192e3c;background:#f3f6f9}*{box-sizing:border-box}
 body{margin:0}.shell{max-width:1040px;margin:0 auto;padding:28px 18px 72px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
 .brand{font-size:1.5rem;font-weight:780;letter-spacing:-.04em}.brand span{color:#2374cb}.muted{color:#647784}.card{border:1px solid #dbe4eb;background:#fff;border-radius:18px;padding:22px;margin:14px 0;box-shadow:0 5px 22px #203d550b}
@@ -13,12 +13,12 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 </style></head><body><div class="shell">
 <header><div class="brand">🍲 Recipe <span>Importer</span></div><div><button id="settings-button" class="secondary hidden" type="button">Settings</button> <button id="logout" class="secondary hidden">Disconnect</button></div></header>
 <div id="message" role="status" aria-live="polite"></div>
-<section id="setup" class="card hidden"><h1>Welcome to Recipe Importer</h1><p class="muted">First-time setup. Connect your existing KitchenOwl installation without editing Docker settings. Your URL and long-lived token are saved in the persistent container volume.</p>
+<section id="setup" class="card hidden"><h1>Welcome to RecipeCove</h1><p class="muted">First-time setup. Connect your existing KitchenOwl installation without editing Docker settings. Your URL and long-lived token are saved in the persistent container volume.</p>
 <form id="setup-form">
-<label for="setup-code">One-time setup code</label><input id="setup-code" type="password" autocomplete="off" required placeholder="Find this in the Recipe Importer container logs"><p class="caption">Find “first-run setup code” in the Docker container logs. It prevents another device from claiming your installation.</p>
+<label for="setup-code">One-time setup code</label><input id="setup-code" type="password" autocomplete="off" required placeholder="Find this in the RecipeCove container logs"><p class="caption">Find “first-run setup code” in the Docker container logs. It prevents another device from claiming your installation.</p>
 <label for="setup-url">KitchenOwl server URL</label><input id="setup-url" type="url" placeholder="http://192.168.0.50:8080" required>
-<label for="setup-llt">KitchenOwl long-lived token (LLT)</label><input id="setup-llt" type="password" autocomplete="off" required><p class="caption">Create a long-lived token in KitchenOwl and paste it here. It stays on your Recipe Importer server, not on the phone.</p>
-<label for="setup-password">Recipe Importer administrator password (12+ characters)</label><input id="setup-password" type="password" minlength="12" autocomplete="new-password" required>
+<label for="setup-llt">KitchenOwl long-lived token (LLT)</label><input id="setup-llt" type="password" autocomplete="off" required><p class="caption">Create a long-lived token in KitchenOwl and paste it here. It stays on your RecipeCove server, not on the phone.</p>
+<label for="setup-password">RecipeCove administrator password (12+ characters)</label><input id="setup-password" type="password" minlength="12" autocomplete="new-password" required>
 <h3>Optional AI recipe parsing</h3><label for="setup-ai-key">OpenAI API key (optional)</label><input id="setup-ai-key" type="password" autocomplete="off"><p class="caption">Without an API key, website parsing, local speech transcription, and OCR still work; messy transcripts may need manual editing.</p>
 <div class="row"><button id="setup-test" type="button" class="secondary">Test connection</button><button id="setup-save" type="submit">Connect &amp; finish setup</button></div>
 </form></section>
@@ -31,7 +31,7 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <div class="row"><button type="submit">Save and verify connection</button><button id="settings-close" class="secondary" type="button">Back to importer</button></div></form>
 <div id="updater-section" style="margin-top:28px;border-top:1px solid #dbe4eb;padding-top:20px">
 <h2>Application updates</h2>
-<p class="muted">Check Recipe Importer’s own GitHub releases and install compatible server/UI updates directly. No Docker socket, separate updater container, or command line required.</p>
+<p class="muted">Check RecipeCove’s own GitHub releases and install compatible server/UI updates directly. No Docker socket, separate updater container, or command line required.</p>
 <div class="row"><div><label>Installed version</label><div id="update-current" style="font-weight:700">Checking…</div></div>
 <div><label>Latest release</label><div id="update-latest" style="font-weight:700">Not checked</div></div></div>
 <div class="row"><button id="update-check" class="secondary" type="button">Check for updates</button><button id="update-install" type="button" disabled>Install update</button><button id="update-rollback" class="secondary" type="button" disabled>Roll back</button></div>
@@ -39,9 +39,9 @@ button{border:0;background:#216dc6;color:white;padding:12px 16px;border-radius:1
 <progress id="update-progress" value="0" max="100" style="width:100%;height:18px;accent-color:#216dc6"></progress>
 <p id="update-detail" class="caption" role="status" aria-live="polite">Updates are checked on demand.</p>
 <p id="update-compat" class="caption">Updates that change Python dependencies, system packages, or the Docker launcher require a standard image redeploy.</p></div></div></section>
-<section id="admin-login" class="card hidden"><h1>Administrator sign-in</h1><p class="muted">Use the administrator password created during Recipe Importer setup.</p>
+<section id="admin-login" class="card hidden"><h1>Administrator sign-in</h1><p class="muted">Use the administrator password created during RecipeCove setup.</p>
 <form id="admin-login-form"><label for="admin-login-password">Administrator password</label><input id="admin-login-password" type="password" autocomplete="current-password" required><button type="submit">Sign in</button></form></section>
-<section id="login" class="card hidden"><h1>KitchenOwl account sign-in</h1><p class="muted">Sign in with your existing KitchenOwl account. Recipe Importer handles the imports and sends finished recipes to your household. Administrators may use the sign-in above instead.</p>
+<section id="login" class="card hidden"><h1>KitchenOwl account sign-in</h1><p class="muted">Sign in with your existing KitchenOwl account. RecipeCove handles the imports and sends finished recipes to your household. Administrators may use the sign-in above instead.</p>
 <form id="login-form"><label for="username">Username</label><input id="username" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button>Connect</button></form></section>
 <div id="workspace" class="hidden"><section class="card"><div class="row"><div><h2>Import a recipe</h2><p class="muted">Paste a recipe website, Facebook video, Instagram Reel, or recipe text. Nothing saves until you approve it.</p></div><div><label for="household">Save to household</label><select id="household"></select></div></div>
 <label for="source">Link or recipe text</label><textarea id="source" placeholder="Paste a recipe website, Facebook/Instagram video, or ingredients and instructions..."></textarea>
@@ -123,7 +123,7 @@ async function boot(){
   if(!state.configured){token='';sessionStorage.removeItem('ri_token');$('setup').classList.remove('hidden');return;}
   if(token){try{const status=await api('/api/auth/status');connected(true,status.is_admin);await load();return;}catch(_){token='';sessionStorage.removeItem('ri_token');}}
   connected(false);
- }catch(err){message('Cannot reach Recipe Importer: '+err.message,'error');}
+ }catch(err){message('Cannot reach RecipeCove: '+err.message,'error');}
 }
 async function setupRequest(endpoint, data){const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const body=await r.json().catch(()=>({}));if(!r.ok)throw Error(body.detail||('Request failed: '+r.status));return body;}
 function setupPayload(){return {setup_code:$('setup-code').value.trim(),kitchenowl_url:$('setup-url').value.trim(),kitchenowl_llt:$('setup-llt').value.trim()};}
@@ -171,7 +171,7 @@ $('update-check').addEventListener('click',async()=>{
 });
 $('update-install').addEventListener('click',async()=>{
  if(!latestRelease?.available||updaterBusy)return;
- if(!confirm('Install Recipe Importer '+latestRelease.latest_version+'? The app will restart briefly. Your configuration and imported recipes will be preserved.'))return;
+ if(!confirm('Install RecipeCove '+latestRelease.latest_version+'? The app will restart briefly. Your configuration and imported recipes will be preserved.'))return;
  try{
   $('update-install').disabled=true;
   await api('/api/admin/updates/install',{method:'POST'});
@@ -180,7 +180,7 @@ $('update-install').addEventListener('click',async()=>{
  }catch(err){updaterMessage('update-detail','Cannot install update: '+err.message);}
 });
 $('update-rollback').addEventListener('click',async()=>{
- if(!confirm('Restore the previous Recipe Importer server version?'))return;
+ if(!confirm('Restore the previous RecipeCove server version?'))return;
  try{await api('/api/admin/updates/rollback',{method:'POST'});await refreshUpdater();}
  catch(err){updaterMessage('update-detail','Rollback failed: '+err.message);}
 });
