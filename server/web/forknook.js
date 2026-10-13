@@ -1,14 +1,35 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const content=$('content');
-const model={token:sessionStorage.getItem('forknook-token')||'',user:null,page:'home',recipes:[],categories:[],lists:[],selected:new Set(),editing:null};
+const model={token:localStorage.getItem('forknook-token')||sessionStorage.getItem('forknook-token')||'',user:null,page:'home',recipes:[],categories:[],lists:[],selected:new Set(),editing:null};
 const node=(tag,props={},...children)=>{let e=document.createElement(tag);for(let [k,v] of Object.entries(props)){if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k==='value')e.value=v;else if(k==='type')e.type=v;else if(k==='onClick')e.addEventListener('click',v);else if(k==='onChange')e.addEventListener('change',v);else if(k==='hidden')e.hidden=!!v;else e.setAttribute(k,v)}for(let child of children.flat()){if(child!==null&&child!==undefined)e.append(child instanceof Node?child:document.createTextNode(String(child)))}return e};
 function announce(message,error=false){const e=$('toast');e.textContent=message;e.className=error?'error':'';e.hidden=false;clearTimeout(announce.timeout);announce.timeout=setTimeout(()=>e.hidden=true,6000)}
-async function api(path,{method='GET',data,form}={}){const headers={};if(model.token)headers.Authorization='Bearer '+model.token;let body;if(form){body=form}else if(data!==undefined){headers['Content-Type']='application/json';body=JSON.stringify(data)}let response;try{response=await fetch('/api/v2'+path,{method,headers,body,cache:'no-store'})}catch(e){throw Error('Cannot reach Forknook. Check your connection.')}const payload=await response.json().catch(()=>({}));if(!response.ok){if(response.status===401&&model.token){model.token='';sessionStorage.removeItem('forknook-token');$('shell').hidden=true;$('auth').hidden=false}throw Error(typeof payload.detail==='string'?payload.detail:('HTTP '+response.status))}return payload}
-async function start(){try{if(model.token){try{model.user=await api('/auth/me');await activate();return}catch(e){model.token='';sessionStorage.removeItem('forknook-token')}}const setup=await api('/setup/status');$('auth').hidden=false;$('shell').hidden=true;const first=!setup.configured;$('code-field').hidden=!first;$('display-field').hidden=!first;$('password').autocomplete=first?'new-password':'current-password';$('auth-title').textContent=first?'Set up your kitchen':'Welcome back';$('auth-hint').textContent=first?'Use the one-time setup code shown in your Forknook container logs. No KitchenOwl account needed.':'Sign in to your family kitchen';$('auth-submit').textContent=first?'Create administrator':'Sign in';model.setup=first}catch(e){announce(e.message,true)}}
-$('auth-form').addEventListener('submit',async e=>{e.preventDefault();const username=$('username').value.trim(),password=$('password').value;try{const request={username,password};if(model.setup){request.setup_code=$('setup-code').value;request.display_name=$('display-name').value||'Administrator'}const answer=await api(model.setup?'/setup/complete':'/auth/login',{method:'POST',data:request});model.token=answer.token;sessionStorage.setItem('forknook-token',model.token);$('password').value='';$('setup-code').value='';model.user=await api('/auth/me');await activate()}catch(err){announce(err.message,true)}});
+async function api(path,{method='GET',data,form}={}){const headers={};if(model.token)headers.Authorization='Bearer '+model.token;let body;if(form){body=form}else if(data!==undefined){headers['Content-Type']='application/json';body=JSON.stringify(data)}let response;try{response=await fetch('/api/v2'+path,{method,headers,body,cache:'no-store'})}catch(e){throw Error('Cannot reach Forknook. Check your connection.')}const payload=await response.json().catch(()=>({}));if(!response.ok){if(response.status===401&&model.token){model.token='';localStorage.removeItem('forknook-token');sessionStorage.removeItem('forknook-token');$('shell').hidden=true;$('auth').hidden=false}throw Error(typeof payload.detail==='string'?payload.detail:('HTTP '+response.status))}return payload}
+async function start(){
+ try{
+  if(model.token){
+   // Only a confirmed authentication failure invalidates the saved session.
+   // A failed page render, network outage or updater restart must not log out.
+   try{
+    model.user=await api('/auth/me');
+   }catch(error){
+    if(model.token){announce('Unable to verify your session. Please retry when Forknook is available.',true);return}
+   }
+   if(model.user){await activate();return}
+  }
+  const setup=await api('/setup/status');
+  $('auth').hidden=false;$('shell').hidden=true;
+  const first=!setup.configured;
+  $('code-field').hidden=!first;$('display-field').hidden=!first;
+  $('password').autocomplete=first?'new-password':'current-password';
+  $('auth-title').textContent=first?'Set up your kitchen':'Welcome back';
+  $('auth-hint').textContent=first?'Use the one-time setup code shown in your Forknook container logs. No KitchenOwl account needed.':'Sign in to your family kitchen';
+  $('auth-submit').textContent=first?'Create administrator':'Sign in';model.setup=first
+ }catch(error){announce(error.message,true)}
+}
+$('auth-form').addEventListener('submit',async e=>{e.preventDefault();const username=$('username').value.trim(),password=$('password').value;try{const request={username,password};if(model.setup){request.setup_code=$('setup-code').value;request.display_name=$('display-name').value||'Administrator'}const answer=await api(model.setup?'/setup/complete':'/auth/login',{method:'POST',data:request});model.token=answer.token;localStorage.setItem('forknook-token',model.token);sessionStorage.removeItem('forknook-token');$('password').value='';$('setup-code').value='';model.user=await api('/auth/me');await activate()}catch(err){announce(err.message,true)}});
 async function activate(){$('auth').hidden=true;$('shell').hidden=false;$('current-user').textContent=model.user.display_name+' · '+model.user.role;$('admin-nav').hidden=model.user.role!=='admin';await openLocation();if(new URLSearchParams(location.search).has('shared_file')){await navigate('sources');announce('Photo/video received. Tap the file field to attach the shared file, then choose Import file.')}const share=new URLSearchParams(location.search).get('share');if(share){history.replaceState(null,'','/app/sources');await navigate('sources',{push:false});$('import-url').value=share;announce('Shared link received. Select Import from URL to add it.')}}
-async function logout(){for(const url of recipePhotoCache.values())URL.revokeObjectURL(url);recipePhotoCache.clear();try{await api('/auth/logout',{method:'POST'})}catch(e){}model.token='';model.user=null;sessionStorage.removeItem('forknook-token');start()}
+async function logout(){for(const url of recipePhotoCache.values())URL.revokeObjectURL(url);recipePhotoCache.clear();try{await api('/auth/logout',{method:'POST'})}catch(e){}model.token='';model.user=null;localStorage.removeItem('forknook-token');sessionStorage.removeItem('forknook-token');start()}
 $('logout').addEventListener('click',logout);$('mobile-logout').addEventListener('click',logout);
 // Every section has a real URL. Browser back/forward, refresh and copied links work.
 const pagePaths={home:'/app/',recipes:'/app/recipes',plan:'/app/plan',shopping:'/app/shopping',sources:'/app/sources',discover:'/app/discover',categories:'/app/categories',admin:'/app/admin','admin-users':'/app/admin/users','admin-backups':'/app/admin/backups','admin-updates':'/app/admin/updates','admin-ai':'/app/admin/ai','admin-imports':'/app/admin/imports','admin-review':'/app/admin/review','admin-api':'/app/admin/api',review:'/app/review'};
