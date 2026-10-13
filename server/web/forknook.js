@@ -234,7 +234,7 @@ async function renderAdminImports(){
   }catch(e){dbProgress.textContent='Cannot read dataset status: '+e.message}
  };
  container.append(card(node('h2',{text:'Expanded recipe discovery'}),
-   node('p',{class:'muted',text:'Search Budget Bytes, Spend With Pennies, Skinnytaste, Wikibooks and TheMealDB together, plus an optional local Food.com database of roughly 230,000 recipes. Search is separate from family recipes; selected items are reviewed before saving.'}),
+   node('p',{class:'muted',text:'Search Spend With Pennies, Skinnytaste, The Chunky Chef, Well Plated, The Recipe Critic, Salt & Lavender, Ambitious Kitchen, Wikibooks and TheMealDB together, plus an optional local Food.com database of roughly 230,000 recipes. Budget Bytes is available individually when its public API allows access. Search is separate from family recipes; selected items are reviewed before saving.'}),
    button('Search all recipe sources',()=>navigate('discover'),'primary')));
  container.append(card(node('h2',{text:'Optional offline Food.com collection'}),
    node('p',{class:'muted',text:'Download the Food.com Recipes and User Interactions dataset yourself from Kaggle and upload RAW_recipes.csv or its ZIP archive. Forknook streams the import into a separate SQLite search index within /data. No new container, paid service or API key is needed. Expect several hundred megabytes of storage.'}),
