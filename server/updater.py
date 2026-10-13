@@ -110,12 +110,20 @@ def _release() -> dict:
     if not bundle or not checksum:
         raise ValueError('Latest release is missing verified application files')
     # Explicitly validate the source; never fetch untrusted response URLs.
-    root = f'https://github.com/{repo}/releases/download/{version}/'
+    allowed_repositories = tuple(dict.fromkeys((repo, REPO, LEGACY_REPO)))
+    accepted_roots = [
+        f'https://github.com/{candidate}/releases/download/{version}/'
+        for candidate in allowed_repositories
+    ]
     for url in (bundle, checksum):
-        if not isinstance(url, str) or not url.startswith(root):
+        if not isinstance(url, str) or not any(
+                url.startswith(root) for root in accepted_roots):
             raise ValueError('Unexpected release asset URL')
+    asset_repo = next(candidate for candidate in allowed_repositories
+                      if bundle.startswith(
+                          f'https://github.com/{candidate}/releases/download/{version}/'))
     return {'version': version.lstrip('v'), 'tag': version, 'bundle': bundle,
-            'checksum': checksum, 'url': info.get('html_url', ''), 'repo': repo}
+            'checksum': checksum, 'url': info.get('html_url', ''), 'repo': asset_repo}
 
 
 def check() -> dict:
