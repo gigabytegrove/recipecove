@@ -111,7 +111,7 @@ def main():
                 LOG.warning('Saved old update pointer %s; newer image %s will be used', backup, image_version)
                 pointer = {'release': None, 'version': image_version}
                 _write(ACTIVE, pointer)
-                _status('ready', 100, f'Forknook {image_version} running from newer Docker image', version=image_version)
+                _status('ready', 100, f'RecipeCove {image_version} running from newer Docker image', version=image_version)
         try:
             path = _location(pointer)
         except RuntimeError as exc:
@@ -120,7 +120,7 @@ def main():
             _write(ACTIVE, pointer)
             path = BASE
         expected = pointer.get('version') or os.environ.get('RI_IMAGE_VERSION', '2.0.0')
-        LOG.info('Starting Forknook %s from %s', expected, path)
+        LOG.info('Starting RecipeCove %s from %s', expected, path)
         env = dict(os.environ)
         env['PYTHONPATH'] = str(path)
         proc = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app:app', '--host', '0.0.0.0',
@@ -141,7 +141,7 @@ def main():
             _status('failed', 0, 'The base Docker image failed to start. Check container logs.')
             return 1
         if not first or STATUS.exists():
-            _status('ready', 100, f'Forknook {expected} running', version=expected)
+            _status('ready', 100, f'RecipeCove {expected} running', version=expected)
         first = False
         while not EXITING:
             if proc.poll() is not None:
@@ -149,7 +149,7 @@ def main():
                 return proc.returncode or 1
             if REQUEST.exists():
                 REQUEST.unlink(missing_ok=True)
-                _status('restarting', 95, 'Restarting Forknook; saved configuration is preserved')
+                _status('restarting', 95, 'Restarting RecipeCove; saved configuration is preserved')
                 _stop(proc)
                 break
             time.sleep(.4)
