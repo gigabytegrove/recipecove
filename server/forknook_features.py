@@ -381,7 +381,7 @@ def _ko_recipe(record:dict)->base.RecipePayload:
         if text.strip():ingredients.append({'name':text[:500],'raw':text[:500]})
 
     full=str(record.get('description') or '')
-    parts=re.split(r'(?im)^\s*#{1,6}\s+(Instructions|Directions|Steps|Method|Notes)\s*$',full)
+    parts=re.split(r'(?im)^\s*#{1,6}\s+(Ingredients|Instructions|Directions|Steps|Method|Notes)\s*$',full)
     summary=parts[0].strip()
     embedded_steps=[]
     embedded_notes=[]
@@ -390,6 +390,11 @@ def _ko_recipe(record:dict)->base.RecipePayload:
         section=parts[index+1].strip()
         if heading=='notes':
             if section:embedded_notes.append(section)
+        elif heading=='ingredients':
+            if not ingredients:
+                for line in section.splitlines():
+                    line=line.lstrip(' -*•0123456789.)').strip()
+                    if line:ingredients.append({'name':line[:500],'raw':line[:500]})
         else:
             for line in section.splitlines():
                 line=re.sub(r'^\s*(?:\d+[.)]|[-*•])\s+','',line).strip()
