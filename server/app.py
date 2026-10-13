@@ -1,4 +1,4 @@
-"""Forknook: standalone family RMS with preserved legacy importer."""
+"""RecipeCove: standalone family RMS with preserved legacy importer."""
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +28,7 @@ import recipes
 import settings_store
 import updater
 
-VERSION = "2.2.13"
+VERSION = "2.3.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Forknook", version=VERSION, lifespan=lifespan,
+app = FastAPI(title="RecipeCove", version=VERSION, lifespan=lifespan,
               docs_url=None, redoc_url=None, openapi_url=None)
 
 @app.exception_handler(Exception)
@@ -56,7 +56,7 @@ async def unexpected_error(request: Request, exc: Exception):
         'Unexpected server error %s %s [%s]',request.method,request.url.path,ref,
         exc_info=(type(exc),exc,exc.__traceback__))
     return JSONResponse(status_code=500,content={
-        'detail':f'Forknook encountered a server error. Reference: {ref}',
+        'detail':f'RecipeCove encountered a server error. Reference: {ref}',
         'error_ref':ref})
 
 
@@ -138,7 +138,7 @@ def health():
 
 @app.get("/")
 def home():
-    # Forknook is the primary app on both fresh and upgraded installations.
+    # RecipeCove is the primary app on both fresh and upgraded installations.
     # The original KitchenOwl importer remains reachable at /legacy.
     return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
 
@@ -354,7 +354,7 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
     finally: await file.close()
 
 
-# Native Forknook RMS lives alongside the original import endpoints so existing
+# Native RecipeCove RMS lives alongside the original import endpoints so existing
 # deployments and mobile clients continue to function during migration.
 app.include_router(forknook.router)
 app.include_router(forknook_features.router)
@@ -366,7 +366,7 @@ def forknook_openapi():
     """Stable v2 contract for Android and future WordPress integrations."""
     routes=[r for r in app.routes if getattr(r,'path','').startswith('/api/v2/') and
             getattr(r,'include_in_schema',False)]
-    return get_openapi(title='Forknook API v2',version=VERSION,routes=routes)
+    return get_openapi(title='RecipeCove API v2',version=VERSION,routes=routes)
 
 
 _FORK_HEADERS = {
@@ -403,7 +403,7 @@ _FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|
 @app.get("/app/{client_path:path}")
 def forknook_route(client_path: str):
     if not _FORK_PATH.fullmatch(client_path):
-        raise HTTPException(404, "Unknown Forknook page")
+        raise HTTPException(404, "Unknown RecipeCove page")
     return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
 
 @app.get("/legacy")
