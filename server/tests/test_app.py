@@ -155,3 +155,16 @@ def test_short_video_ocr():
             '-c:v','libx264','-pix_fmt','yuv420p','-y',str(video)],capture_output=True)
         if result.returncode: pytest.skip('FFmpeg lacks drawtext or libx264')
         assert 'CUPS FLOUR' in media.ocr_video(video,Path(d))
+
+def test_about_route_security_headers_and_unknown_route(client):
+    about = client.get('/app/about')
+    assert about.status_code == 200
+    assert 'Forknook' in about.text
+    assert "style-src 'self'" in about.headers.get('content-security-policy','')
+    assert client.get('/app/not-a-real-page').status_code == 404
+
+def test_app_ui_does_not_generate_inline_style_attributes(client):
+    js = client.get('/app/forknook.js')
+    assert js.status_code == 200
+    assert "style:'" not in js.text
+    assert 'style:"' not in js.text
