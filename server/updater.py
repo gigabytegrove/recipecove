@@ -24,7 +24,8 @@ from fastapi import HTTPException
 
 DATA = Path(os.environ.get('DATA_DIR', '/data')) / 'updates'
 BASE = Path('/app')
-REPO = 'gigabytegrove/forknook'
+REPO = os.environ.get('RECIPECOVE_GITHUB_REPO', 'gigabytegrove/recipecove')
+LEGACY_REPO = 'gigabytegrove/forknook'
 API = f'https://api.github.com/repos/{REPO}/releases/latest'
 ACTIVE = DATA / 'active.json'
 STATUS = DATA / 'status.json'
@@ -69,7 +70,7 @@ def _semver(value: str) -> tuple[int, int, int]:
 
 
 def _https_get(url: str, size: int = _MAX_PACKAGE) -> bytes:
-    req = urllib.request.Request(url, headers={'User-Agent': 'ForknookUpdater/2.0', 'Accept': 'application/vnd.github+json'})
+    req = urllib.request.Request(url, headers={'User-Agent': 'RecipeCoveUpdater/2.3', 'Accept': 'application/vnd.github+json'})
     with urllib.request.urlopen(req, timeout=40) as response:
         # GitHub release asset URLs redirect to GitHub's asset CDN.
         result = response.read(size + 1)
@@ -79,29 +80,48 @@ def _https_get(url: str, size: int = _MAX_PACKAGE) -> bytes:
 
 
 def _release() -> dict:
-    info = json.loads(_https_get(API, 250_000))
+    # During the rename window, the owner intentionally keeps the existing
+    # repository until the new version is installed on production. Prefer the
+    # new repository; only use the legacy name while migration is incomplete.
+    info = None
+    repo = REPO
+    for candidate in dict.fromkeys((REPO, LEGACY_REPO)):
+        try:
+            info = json.loads(_https_get(
+                f'https://api.github.com/repos/{candidate}/releases/latest', 250_000))
+            repo = candidate
+            break
+        except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
+            continue
+    if info is None:
+        raise ValueError('Cannot find a RecipeCove release')
     version = info.get('tag_name', '')
     _semver(version)
     assets = info.get('assets', [])
-    prefix = f'forknook-server-{version.lstrip("v")}'
-    files = {asset.get('name'): asset.get('browser_download_url') for asset in assets if isinstance(asset, dict)}
-    bundle = files.get(prefix + '.tar.gz')
-    checksum = files.get(prefix + '.sha256')
+    files = {asset.get('name'): asset.get('browser_download_url')
+             for asset in assets if isinstance(asset, dict)}
+    bundle = checksum = None
+    for prefix in ('recipecove-server-' + version.lstrip('v'),
+                   'forknook-server-' + version.lstrip('v')):
+        bundle = files.get(prefix + '.tar.gz')
+        checksum = files.get(prefix + '.sha256')
+        if bundle and checksum:
+            break
     if not bundle or not checksum:
-        raise ValueError('Latest release is missing its required server update files')
-    # Do not accept external download URLs from API response; validate asset paths.
-    root = f'https://github.com/{REPO}/releases/download/{version}/'
+        raise ValueError('Latest release is missing verified application files')
+    # Explicitly validate the source; never fetch untrusted response URLs.
+    root = f'https://github.com/{repo}/releases/download/{version}/'
     for url in (bundle, checksum):
         if not isinstance(url, str) or not url.startswith(root):
             raise ValueError('Unexpected release asset URL')
     return {'version': version.lstrip('v'), 'tag': version, 'bundle': bundle,
-            'checksum': checksum, 'url': info.get('html_url', '')}
+            'checksum': checksum, 'url': info.get('html_url', ''), 'repo': repo}
 
 
 def check() -> dict:
     """Check the latest checksum-verified application release.
 
-    Forknook has no dependency on any container runtime API or external
+    RecipeCove has no dependency on any container runtime API or external
     deployment platform. Only Python/UI changes compatible with the existing
     image can be applied by an unprivileged in-container process.
     """
@@ -114,14 +134,14 @@ def check() -> dict:
         'requires_image': False,
         'release_url': None,
         'code_error': None,
-        'note': 'Updates install inside Forknook using a verified release, a supervised restart, and automatic rollback.',
+        'note': 'Updates install inside RecipeCove using a verified release, a supervised restart, and automatic rollback.',
     }
     try:
         release = _release()
         result['latest_version'] = release['version']
         result['release_url'] = release['url']
         manifest = json.loads(_https_get(
-            f'https://raw.githubusercontent.com/{REPO}/v{release["version"]}/server/update_release.json',
+            f'https://raw.githubusercontent.com/{release["repo"]}/v{release["version"]}/server/update_release.json',
             5000))
         if manifest.get('version') != release['version']:
             raise ValueError('Release metadata version mismatch')
