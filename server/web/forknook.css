@@ -112,3 +112,10 @@ body{line-height:1.52;-webkit-text-size-adjust:100%}
 .recipe-preview-body h3{margin:22px 0 10px}
 .recipe-preview-body li{line-height:1.65;margin:7px 0;overflow-wrap:anywhere}
 .recipe-preview-body .toolbar{justify-content:flex-end;margin-top:22px}
+
+/* CSP-compliant layout classes: no inline style attributes. */
+.plan-week-heading{margin:22px 0 12px}
+.update-progress{width:100%;height:16px}
+.update-progress-large{height:20px}
+.about-brand{max-width:340px;margin:0 0 20px}
+.about-brand img{display:block;width:100%;height:auto}
