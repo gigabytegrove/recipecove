@@ -1,10 +1,10 @@
-# Forknook development rules
+# RecipeCove development rules
 
 These constraints are requirements, not optional suggestions.
 
 ## Platform-agnostic deployment and updates
-- Forknook must run on a standard OCI/Docker-compatible runtime; never require a named hosting panel, orchestration platform, or external updater provider.
-- All compatible app/server/UI releases must be installable from **Administration → Updates** within the existing running Forknook container, using its persistent /data volume, integrity-verified release packages, supervised restart, and rollback.
+- RecipeCove must run on a standard OCI/Docker-compatible runtime; never require a named hosting panel, orchestration platform, or external updater provider.
+- All compatible app/server/UI releases must be installable from **Administration → Updates** within the existing running RecipeCove container, using its persistent /data volume, integrity-verified release packages, supervised restart, and rollback.
 - Do not add a host Docker socket, privileged container, sidecar, companion updater, separately deployed service, or third-party container-management integration. Do not reintroduce vendor-specific update controls.
 - Hold runtime dependencies and launcher interfaces stable across normal releases to permit in-container updates. Use compatibility metadata and refuse an unsafe/incompatible bundle before switching the active version.
 - Do not claim an unprivileged container can replace its own underlying OCI image. OS-package changes, container-entrypoint changes or immutable runtime changes that truly require an image replacement must be called out explicitly, not silently routed through an external platform.
@@ -12,7 +12,7 @@ These constraints are requirements, not optional suggestions.
 - Never discard named volumes or existing recipes, users, media, approvals, meal plans, and shopping lists.
 
 ## Product version alignment
-- The web/PWA, server, and native Android app share one stable Forknook release number. Do not suffix one client with -alpha unless the owner specifically designates that release as pre-release.
+- The web/PWA, server, and native Android app share one stable RecipeCove release number. Do not suffix one client with -alpha unless the owner specifically designates that release as pre-release.
 - Keep the Android versionCode monotonically increasing even when versionName is the same stable release; verify GitHub server and Android builds before marking published.
 - Versioned local Windows APK build instructions must be included with every Android change.
 
