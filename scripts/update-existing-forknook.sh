@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Update an existing Forknook Compose container in place without losing volumes.
+# Update an existing RecipeCove Compose container in place without losing volumes.
 # Does not deploy a second stack, modify Compose files, or remove user data.
 set -Eeuo pipefail
 IMAGE='ghcr.io/gigabytegrove/forknook:latest'
 EXPECTED="${FORKNOOK_TARGET_VERSION:-2.2.3}"
-[[ "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid Forknook version" >&2; exit 1; }
+[[ "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid RecipeCove version" >&2; exit 1; }
 PINNED_IMAGE="ghcr.io/gigabytegrove/forknook:$EXPECTED"
 
 for executable in docker python3; do
@@ -22,7 +22,7 @@ while IFS= read -r id; do
   fi
 done < <(docker ps -q)
 if (( ${#MATCHES[@]} != 1 )); then
-  echo 'ERROR: Expected exactly one running Forknook container using ghcr.io/gigabytegrove/forknook.' >&2
+  echo 'ERROR: Expected exactly one running RecipeCove container using ghcr.io/gigabytegrove/forknook.' >&2
   docker ps --format '{{.Names}}  {{.Image}}'
   exit 1
 fi
@@ -79,7 +79,7 @@ PY
 )"
 if [[ -n "$BACKUP" ]]; then echo "Preserved in-app updater pointer at $BACKUP"; fi
 
-echo "Pulling pinned Forknook $EXPECTED image…"
+echo "Pulling pinned RecipeCove $EXPECTED image…"
 if ! docker pull "$PINNED_IMAGE"; then
   echo 'ERROR: Image pull failed. Your running service has not been recreated.' >&2
   if [[ -n "$BACKUP" ]]; then
@@ -108,7 +108,7 @@ if docker compose "${args[@]}" up -d --no-deps --no-build --pull never --force-r
   if [[ -n "$NEW_CID" ]]; then
     for attempt in $(seq 1 60); do
       if ready "$NEW_CID" "$EXPECTED"; then
-        echo "SUCCESS: Forknook $EXPECTED is running, with the existing volumes and Compose stack."
+        echo "SUCCESS: RecipeCove $EXPECTED is running, with the existing volumes and Compose stack."
         docker exec "$NEW_CID" python -c 'import json,urllib.request;print(json.load(urllib.request.urlopen("http://127.0.0.1:8999/health",timeout=3)))'
         exit 0
       fi
