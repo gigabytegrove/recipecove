@@ -288,3 +288,31 @@ def test_shopping_ingredient_clean_labels():
     )
     for raw, expected in cases:
         assert base.shopping_ingredient(raw) == expected
+
+def test_kitchenowl_plain_text_description_becomes_directions():
+    record = {
+        'name': 'Salt Potatoes',
+        'description': 'Simple potatoes from Syracuse.\\n\\n'
+                       'Wash the potatoes.\\n'
+                       'Fill a large pot with water.\\n'
+                       'Cook until tender.',
+        'items': [{'name':'Potatoes','description':'2 pounds'}],
+        'photo': 'legacy-picture.jpg'
+    }
+    parsed = ext._ko_recipe(record)
+    assert parsed.description == 'Simple potatoes from Syracuse.'
+    assert len(parsed.instructions) == 3
+    assert parsed.ingredients[0]['name'] == '2 pounds Potatoes'
+    assert parsed.image_url == 'legacy-picture.jpg'
+
+
+def test_kitchenowl_long_commentary_not_treated_as_directions():
+    record = {
+        'name':'An article, not a recipe',
+        'description':'An introductory paragraph.\\n\\n' +
+            '\\n'.join(['This is background commentary about baking.'] * 20 +
+                      ['Mix these together.', 'Cook them soon.']),
+        'items': []
+    }
+    parsed = ext._ko_recipe(record)
+    assert parsed.instructions == []
