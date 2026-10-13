@@ -2,7 +2,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.2 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.3 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -96,11 +96,11 @@ X-RecipeCove-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.3.2 stable)
+## Native Kotlin Android client (2.3.3 stable)
 
 RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
-Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored RecipeCove server URL when possible, but users must sign in again with their RecipeCove account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.3.2**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
+Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored RecipeCove server URL when possible, but users must sign in again with their RecipeCove account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.3.3**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
 
 To build on the same Windows PC as Calden, open PowerShell:
 
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
 ```
 
-The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.2-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.2 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
+The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.3-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.3 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
 
 ## Tests and limitations
 
@@ -154,73 +154,78 @@ Combined discovery searches use public WordPress REST search APIs from Spend Wit
 
 ## Version alignment
 
-Web/PWA and server release **v2.3.2 stable** and Android **v2.3.2 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.3.2-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
+Web/PWA and server release **v2.3.3 stable** and Android **v2.3.3 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.3.3-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
 
 
-### Android branding and safe-area layout (2.3.2)
+### Android branding and safe-area layout (2.3.3)
 The native Android sign-in and top bar now display the existing approved RecipeCove PNG logo from the web application (same exact image, unmodified). The green header is replaced by a white header on a warm cream background with terracotta primary actions. Android 15 edge-to-edge rendering uses dark status/navigation icons and Compose `WindowInsets.safeDrawing` once at the application root. The nested Scaffold and NavigationBar do not consume system insets twice. The header therefore appears beneath the phone's clock and notification icons, and content remains within the usable screen bounds. Validate final appearance on actual phones.
 
 
-### Android Share-to-RecipeCove support (2.3.2)
+### Android Share-to-RecipeCove support (2.3.3)
 RecipeCove's native Kotlin Android client registers for Android ACTION_SEND text/HTML, images, and video, plus ACTION_SEND_MULTIPLE media shares and Instagram HTTPS Reel/post ACTION_VIEW links. Android's system Share menu—not a button inside RecipeCove—shows the RecipeCove destination where the originating app allows it. On receipt the client retains the shared URL/text/content URI, asks for native RecipeCove login when necessary, displays an Import shared recipe progress screen, sends the source to RecipeCove's own parsing API, and opens a review/edit screen. Failed extraction retains the incoming share for retry or dismissal. Restricted Instagram posts or inaccessible video sources still cannot be guaranteed extractable; those limitations are reported instead of silently discarding the source. Added Kotlin unit tests for social caption URL extraction to the APK build pipeline. Family approval behavior remains unchanged.
 
 
-## Release 2.3.2 — everyday cooking improvements
+## Release 2.3.3 — everyday cooking improvements
 
 Recipe discovery now offers a read-only preview before importing on web and Android. Android places **Discover** in primary navigation. **Plan to Make** supports choosing a date and, optionally, a meal type. Shopping lists show ingredient names first and preserve the amount separately (for example, **Hot Honey (3 Tbsp)**). Marking an item **Have It** removes it from the active shopping view, while the optional Have It group retains it for undoing the selection.
 
 KitchenOwl re-imports can repair previously missing locally cached photos and restore sectioned Markdown ingredients and instructions when the source provides those fields. Existing edited family recipes are not bulk-overwritten. Migration remains read-only with respect to KitchenOwl. Image restoration is contingent on the source exposing an accessible image URL or authenticated image response; an image cannot be reconstructed when KitchenOwl no longer supplies it.
 
-The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.2-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.3-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
 
 
-## Release 2.3.2 — web session persistence fix
+## Release 2.3.3 — web session persistence fix
 
 The web client now retains a validated login across browser refreshes using durable same-origin storage. Previously authenticated sessions are migrated on successful verification. Only an authentication rejection invalidates a stored login; transient connection errors or page rendering failures no longer clear it. Logging out still removes the stored token and revokes the server-side session.
 
 
-## 2.3.2 production UI review
+## 2.3.3 production UI review
 
 The web sidebar and dashboard use **Plan to Make** terminology, and recipe cards truncate descriptions at a word boundary with an ellipsis. KitchenOwl migration now accepts authenticated same-origin photo URLs with query parameters and does not fetch or cache photographs during migration previews. Previously missing photographs still require a real re-import with valid KitchenOwl credentials and accessible source media. Existing images cannot be fabricated from absent originals.
 
 
-## Version 2.3.2 — KitchenOwl export repair
+## Version 2.3.3 — KitchenOwl export repair
 
 The KitchenOwl JSON importer now uses the same source-aware converter as the live API migration. Instead of throwing away ingredients, instructions, notes, time information, and image metadata, it retains compatible fields. Existing imported records can be repaired from an original KitchenOwl JSON export through **Administration → Backups → Repair imported recipes**. Repairs fill missing structured directions and other empty fields; an unchanged original description can be separated into a summary and cooking steps. The operation does not overwrite edited descriptions or existing populated fields. Source photos identified only by bare filenames remain unresolved until the original KitchenOwl media bytes can be retrieved. Migration never invents media URLs or images. Review preview and back up /data before bulk repair.
 
 
-## 2.3.2 — Review-first recovery from original recipe pages
+## 2.3.3 — Review-first recovery from original recipe pages
 
 Approvers and administrators can open any saved recipe with an HTTP(S) source URL and select **Recover from original source**. RecipeCove uses the existing structured website importer, prefers a longer ingredient list or directions list from the source, retains the existing recipe ID and filled fields, and opens the edit form for explicit review. Nothing is saved until the user submits the existing editor. This is intended for incomplete KitchenOwl exports where ingredient quantities exist on the original recipe page but not in the JSON export. It cannot recover an unavailable or inaccessible website, and users must verify accuracy before saving.
 
 
-## 2.3.2 — About page and CSP compliance
+## 2.3.3 — About page and CSP compliance
 
 Added an About RecipeCove page in desktop and mobile web navigation, with brand identity, publisher, self-hosting/privacy information and GitHub link. Replaced all three web JavaScript-generated inline `style` attributes with stylesheet classes to comply with `style-src 'self'` without relaxing the content security policy. This removes the browser console errors from the administration and update progress panels.
 
 
-## 2.3.2 — audit baseline route and CSP regression protection
+## 2.3.3 — audit baseline route and CSP regression protection
 
 Adds direct-page support for /app/about and regression tests that ensure unrecognized routes are rejected and the strict style CSP remains in force. A full static source security audit, risk register and remaining priorities are in SECURITY_AUDIT_2026-10-13.md. The audit identifies security work still required; this maintenance release does not claim those risks are solved.
 
 
-## 2.3.2 — Security hardening
+## 2.3.3 — Security hardening
 
 External recipe and image fetches now pin connections to public validated addresses, preserving HTTPS SNI and checking redirects. Android HTTP logins require explicit per-origin risk acceptance; Android session tokens migrate to Keystore AES-GCM encrypted storage. Web HTTP sessions also require explicit per-origin risk acceptance. Server CI tokens now use least privilege and immutable action revisions. A weekly dependency security scanning workflow has been added. Security work still outstanding includes browser HttpOnly cookie migration, fully deterministic runtime images, and on-deployment penetration testing.
 
 
-## RecipeCove rename rollout (2.3.2)
+## RecipeCove rename rollout (2.3.3)
 
-**Do not rename the existing GitHub repository until RecipeCove 2.3.2 is installed and verified in your running instance.** Version 2.3.2 contains an updater bridge that first checks the future RecipeCove repository and falls back to the current repository during migration. The first 2.3.2 GitHub release must publish **both** RecipeCove and legacy Forknook server asset filenames so the existing updater can install it. The REST API path `/api/v2`, database schema, saved recipe photographs, user identities, Android package identifier and Android session storage names remain unchanged for upgrade compatibility. They are internal compatibility identifiers, not user-facing branding. The existing Compose data volume and service key stay unchanged deliberately to prevent losing persisted data. After installation and repo rename, future releases use the new URL and product name.
+**Do not rename the existing GitHub repository until RecipeCove 2.3.3 is installed and verified in your running instance.** Version 2.3.3 contains an updater bridge that first checks the future RecipeCove repository and falls back to the current repository during migration. The first 2.3.3 GitHub release must publish **both** RecipeCove and legacy Forknook server asset filenames so the existing updater can install it. The REST API path `/api/v2`, database schema, saved recipe photographs, user identities, Android package identifier and Android session storage names remain unchanged for upgrade compatibility. They are internal compatibility identifiers, not user-facing branding. The existing Compose data volume and service key stay unchanged deliberately to prevent losing persisted data. After installation and repo rename, future releases use the new URL and product name.
 
 The approved new artwork is derived from the supplied RecipeCove logo; web assets are `recipecove-logo.svg` and `recipecove-icon.svg`. The native Android app uses a VectorDrawable emblem.
 
 
-## 2.3.2 — Final RecipeCove migration package
+## 2.3.3 — Final RecipeCove migration package
 
 This patch release includes the exact owner-approved RecipeCove branding assets, native Android artwork, transitional updater compatibility and completed release verification. Keep the existing GitHub repository named gigabytegrove/forknook until this new version is installed and checked on the current server. The data volume, Android application identifier, and legacy updater package names remain compatible with previous installations. After successful installation, rename the repository to gigabytegrove/recipecove.
 
 
-## 2.3.2 — Rebrand asset corrections
+## 2.3.3 — Rebrand asset corrections
 
 Fix the RecipeCove logo asset reference and allow the approved WebP icon through the application asset server. This release supersedes 2.3.1 as the recommended first installation before the owner renames the GitHub repository. It preserves all previous installation compatibility identifiers and data.
+
+
+## 2.3.3 — Android branding and password entry
+
+Android uses the **exact approved RecipeCove wordmark and cookbook icon**, matching the web app. The login password field provides Show/Hide, requests the Android password keyboard with autocorrect disabled, and keeps entered characters unchanged rather than trimming the password. The visible logo uses Fit instead of Crop. Native app package and saved sessions remain compatible.
