@@ -1,15 +1,15 @@
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#183c2b"><meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Forknook">
+<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="RecipeCove">
 <meta name="description" content="Your family's own kitchen: recipes, meal plans and shopping lists">
 <link rel="manifest" href="/app/manifest.json"><link rel="apple-touch-icon" href="/app/icon-192.png">
 <link rel="icon" href="/app/icon-192.png"><link rel="stylesheet" href="/app/forknook.css">
-<title>Forknook · Family kitchen</title></head><body>
+<title>RecipeCove · Family kitchen</title></head><body>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <section id="auth" class="auth-shell">
-  <div class="auth-card"><img class="auth-brand" src="/app/forknook-logo.png" alt="Forknook">
-    <p class="muted centered">Your family's recipes, made your way.</p>
+  <div class="auth-card"><img class="auth-brand" src="/app/forknook-logo.png" alt="RecipeCove">
+    <p class="muted centered">Your recipes. One place.</p>
     <h1 id="auth-title">Welcome</h1><p id="auth-hint" class="muted"></p>
     <form id="auth-form" class="stack">
       <label id="code-field" hidden>First-run setup code<input id="setup-code" type="password" autocomplete="off"></label>
@@ -21,7 +21,7 @@
   </div>
 </section>
 <div id="shell" hidden>
-  <aside class="sidebar"><a class="sidebar-brand" id="brand-home" href="/app/" title="Return to Forknook home"><img src="/app/icon-192.png" alt=""/><div><strong>Forknook</strong><small>Our family kitchen</small></div></a>
+  <aside class="sidebar"><a class="sidebar-brand" id="brand-home" href="/app/" title="Return to RecipeCove home"><img src="/app/icon-192.png" alt=""/><div><strong>RecipeCove</strong><small>Our family kitchen</small></div></a>
     <nav id="main-nav" aria-label="Primary navigation">
       <button data-page="home">🏠 <span>Home</span></button>
       <button data-page="recipes">📖 <span>Recipes</span></button>
@@ -59,7 +59,7 @@
     <label class="full">Or upload a recipe photograph<input id="recipe-photo-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
     <div class="full recipe-photo-editor" id="recipe-photo-preview"></div>
     <p class="full muted small" id="recipe-photo-status">No recipe image selected</p>
-    <label class="full check-row"><input type="checkbox" id="publish-recipe"> Allow approved publication through the Forknook API (approvers only)</label>
+    <label class="full check-row"><input type="checkbox" id="publish-recipe"> Allow approved publication through the RecipeCove API (approvers only)</label>
     <label class="full">Tags (comma separated)<input name="tags" placeholder="family favorite, dinner"></label>
     <label class="full">Source URL<input name="source_url" type="url" placeholder="https://..."></label>
     <label class="full">Notes<textarea name="notes" rows="3"></textarea></label>
