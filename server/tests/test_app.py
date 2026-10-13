@@ -31,7 +31,7 @@ def client():
 
 def test_health_and_web(client):
     r = client.get('/health')
-    assert r.json()['version'] == '2.2.2'
+    assert r.json()['version'] == '2.2.3'
     web = client.get('/')
     assert web.status_code == 200
     assert 'Forknook' in web.text
