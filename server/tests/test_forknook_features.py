@@ -316,3 +316,33 @@ def test_kitchenowl_long_commentary_not_treated_as_directions():
     }
     parsed = ext._ko_recipe(record)
     assert parsed.instructions == []
+
+
+def test_json_repair_restores_steps_without_overwriting_recipe_edits(family):
+    import json as _json
+    c,admin,_=family
+    imported=c.post('/api/v2/recipes',headers=admin,json={
+        'title':'Salt Potatoes','description':'An introduction.\\n\\nWash potatoes.\\nCook potatoes.',
+        'ingredients':[{'name':'Potatoes','raw':'Potatoes'}],'instructions':[]})
+    assert imported.status_code==201,imported.text
+    recipe_id=imported.json()['id']
+    export={'recipes':[{
+        'name':'Salt Potatoes',
+        'description':'An introduction.\\n\\nWash potatoes.\\nCook potatoes.',
+        'items':[{'name':'Potatoes','description':'2 lb'}],
+        'photo':'private-picture.jpg'}]}
+    source=_json.dumps(export).encode('utf-8')
+    upload=lambda dry: c.post('/api/v2/admin/import-json',
+        headers=admin,params={'dry_run':str(dry).lower(),'repair_existing':'true'},
+        files={'file':('kitchenowl.json',source,'application/json')})
+    preview=upload(True)
+    assert preview.status_code==200,preview.text
+    assert preview.json()['would_repair']==1
+    assert c.get(f'/api/v2/recipes/{recipe_id}',headers=admin).json()['instructions']==[]
+    completed=upload(False)
+    assert completed.status_code==200,completed.text
+    assert completed.json()['repaired']==1
+    updated=c.get(f'/api/v2/recipes/{recipe_id}',headers=admin).json()
+    assert updated['instructions']==['Wash potatoes.','Cook potatoes.']
+    assert updated['image_url']==''
+    assert len(c.get('/api/v2/recipes',headers=admin).json())==1
