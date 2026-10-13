@@ -409,7 +409,7 @@ def _ko_recipe(record:dict)->base.RecipePayload:
                           r'beat |mash |soften |gather |wash |drain |'
                           r'using |while |once |after |when |working )',re.I)
         candidate_lines=[line.strip() for line in remainder.splitlines() if line.strip()]
-        if candidate_lines and sum(bool(action.match(line)) for line in candidate_lines)>=2:
+        if candidate_lines and sum(bool(action.match(line)) for line in candidate_lines)>=2 and sum(bool(action.match(line)) for line in candidate_lines)/len(candidate_lines)>=0.3:
             summary=intro.strip()
             embedded_steps=candidate_lines
     steps=record.get('instructions') or record.get('steps') or embedded_steps
