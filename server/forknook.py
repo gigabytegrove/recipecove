@@ -816,7 +816,7 @@ async def import_video(file:UploadFile=File(...),who:dict=Depends(principal)):
     return create_recipe(RecipePayload.model_validate(data),who)
 
 @router.post("/admin/import-json")
-async def import_json(file:UploadFile=File(...),dry_run:bool=True,who:dict=Depends(admin)):
+async def import_json(file:UploadFile=File(...),dry_run:bool=True,repair_existing:bool=False,who:dict=Depends(admin)):
     """Copy-only KitchenOwl/Forknook JSON import; dry-run by default.
 
     Accepted formats: arrays of recipe objects, or {recipes:[...]}, or a
@@ -845,25 +845,58 @@ async def import_json(file:UploadFile=File(...),dry_run:bool=True,who:dict=Depen
         if not isinstance(direction,list):
             direction=[s.strip() for s in str(direction or record.get('description') or '').splitlines() if s.strip()]
         try:
-            model=RecipePayload(title=title[:300],description=str(record.get('description') or '')[:2000],
-                  ingredients=ingredients[:200],instructions=[str(s)[:3000] for s in direction][:100],
-                  notes=str(record.get('notes') or '')[:2000],source_url=str(record.get('source_url') or '')[:2000])
-            candidates.append(model)
-        except ValueError:continue
-    if dry_run:
-        return {'dry_run':True,'found':len(entries),'valid':len(candidates),'would_import':len(candidates),'changed':False}
+            if 'name' in record and 'items' in record:
+                # KitchenOwl JSON export: same parser as the authenticated API.
+                import forknook_features
+                model=forknook_features._ko_recipe(record)
+            else:
+                model=RecipePayload(title=title[:300],description=str(record.get('description') or '')[:2000],
+                      ingredients=ingredients[:200],instructions=[str(s)[:3000] for s in direction][:100],
+                      notes=str(record.get('notes') or '')[:2000],source_url=str(record.get('source_url') or '')[:2000])
+            candidates.append((model,record))
+        except (ValueError,TypeError):continue
     with LOCK,database() as db:
-        added=0;now=time.time()
-        for item in candidates:
-            existing=db.execute('SELECT 1 FROM recipes WHERE title=? COLLATE NOCASE',(item.title,)).fetchone()
-            if existing:continue
-            db.execute("INSERT INTO recipes(title,data,created_by,created_at,updated_at) VALUES (?,?,?,?,?)",
-                       (item.title,item.model_dump_json(),who['id'],now,now));added+=1
-        db.execute('INSERT INTO migration_runs(source,attempted,imported,skipped,created_at) VALUES (?,?,?,?,?)',
-            ('json',len(candidates),added,len(candidates)-added,time.time()))
-        db.commit()
-    return {'dry_run':False,'found':len(entries),'valid':len(candidates),'imported':added,'skipped':len(candidates)-added,
-            'source_unchanged':True}
+        imported=0
+        repaired=0
+        already=0
+        repairable=0
+        for item,record in candidates:
+            existing=db.execute('SELECT id,data FROM recipes WHERE title=? COLLATE NOCASE',(item.title,)).fetchone()
+            if existing:
+                already+=1
+                if repair_existing and 'name' in record and 'items' in record:
+                    saved=json.loads(existing['data'])
+                    new_data=dict(saved)
+                    original=str(record.get('description') or '')
+                    # Repair only when Forknook still contains the unmodified
+                    # KitchenOwl description, never overwrite user edits.
+                    if saved.get('description','')==original and item.description!=original:
+                        new_data['description']=item.description
+                    if not saved.get('instructions') and item.instructions:
+                        new_data['instructions']=item.instructions
+                    if not saved.get('ingredients') and item.ingredients:
+                        new_data['ingredients']=item.ingredients
+                    if not saved.get('notes') and item.notes:
+                        new_data['notes']=item.notes
+                    if new_data!=saved:
+                        repairable+=1
+                        if not dry_run:
+                            db.execute('UPDATE recipes SET data=?,updated_at=? WHERE id=?',
+                                (json.dumps(new_data,ensure_ascii=False),time.time(),existing['id']))
+                            repaired+=1
+                continue
+            if not dry_run:
+                db.execute("INSERT INTO recipes(title,data,created_by,created_at,updated_at) VALUES (?,?,?,?,?)",
+                           (item.title,item.model_dump_json(),who['id'],time.time(),time.time()))
+                imported+=1
+        if not dry_run:
+            db.execute('INSERT INTO migration_runs(source,attempted,imported,skipped,created_at) VALUES (?,?,?,?,?)',
+                ('json',len(candidates),imported,already,time.time()))
+    return {'dry_run':dry_run,'found':len(entries),'valid':len(candidates),
+            'would_import':len(candidates)-already if dry_run else 0,
+            'would_repair':repairable if dry_run else 0,
+            'imported':imported,'repaired':repaired,'skipped':already,
+            'changed':not dry_run and (imported+repaired)>0,'source_unchanged':True}
 
 @router.get('/admin/updates/status')
 def updates_status(who:dict=Depends(admin)):
