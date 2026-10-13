@@ -227,7 +227,7 @@ class StatePayload(BaseModel):
 
 class MealPayload(BaseModel):
     day: str
-    meal: str
+    meal: str = 'anytime'
     recipe_id: int
     servings: float = Field(default=1,gt=0,le=100)
     note: str = Field(default="",max_length=500)
@@ -505,7 +505,7 @@ def meal_plan(start:str|None=None,end:str|None=None,who:dict=Depends(principal))
 @router.post("/meal-plan",status_code=201)
 def add_meal(body:MealPayload,who:dict=Depends(principal)):
     validate_day(body.day)
-    if body.meal not in ("breakfast","lunch","dinner","snack"):raise HTTPException(422,"Invalid meal")
+    if body.meal not in ("anytime","breakfast","lunch","dinner","snack"):raise HTTPException(422,"Invalid meal")
     with LOCK,database() as db:
         _recipe_exists(db,body.recipe_id)
         r=db.execute("INSERT INTO meal_plan(day,meal,recipe_id,servings,note,created_by) VALUES (?,?,?,?,?,?)",
