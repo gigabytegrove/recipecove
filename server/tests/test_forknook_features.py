@@ -292,9 +292,9 @@ def test_shopping_ingredient_clean_labels():
 def test_kitchenowl_plain_text_description_becomes_directions():
     record = {
         'name': 'Salt Potatoes',
-        'description': 'Simple potatoes from Syracuse.\\n\\n'
-                       'Wash the potatoes.\\n'
-                       'Fill a large pot with water.\\n'
+        'description': 'Simple potatoes from Syracuse.\n\n'
+                       'Wash the potatoes.\n'
+                       'Fill a large pot with water.\n'
                        'Cook until tender.',
         'items': [{'name':'Potatoes','description':'2 pounds'}],
         'photo': 'legacy-picture.jpg'
@@ -309,8 +309,8 @@ def test_kitchenowl_plain_text_description_becomes_directions():
 def test_kitchenowl_long_commentary_not_treated_as_directions():
     record = {
         'name':'An article, not a recipe',
-        'description':'An introductory paragraph.\\n\\n' +
-            '\\n'.join(['This is background commentary about baking.'] * 20 +
+        'description':'An introductory paragraph.\n\n' +
+            '\n'.join(['This is background commentary about baking.'] * 20 +
                       ['Mix these together.', 'Cook them soon.']),
         'items': []
     }
@@ -322,13 +322,13 @@ def test_json_repair_restores_steps_without_overwriting_recipe_edits(family):
     import json as _json
     c,admin,_=family
     imported=c.post('/api/v2/recipes',headers=admin,json={
-        'title':'Salt Potatoes','description':'An introduction.\\n\\nWash potatoes.\\nCook potatoes.',
+        'title':'Salt Potatoes','description':'An introduction.\n\nWash potatoes.\nCook potatoes.',
         'ingredients':[{'name':'Potatoes','raw':'Potatoes'}],'instructions':[]})
     assert imported.status_code==201,imported.text
     recipe_id=imported.json()['id']
     export={'recipes':[{
         'name':'Salt Potatoes',
-        'description':'An introduction.\\n\\nWash potatoes.\\nCook potatoes.',
+        'description':'An introduction.\n\nWash potatoes.\nCook potatoes.',
         'items':[{'name':'Potatoes','description':'2 lb'}],
         'photo':'private-picture.jpg'}]}
     source=_json.dumps(export).encode('utf-8')
