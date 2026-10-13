@@ -198,10 +198,12 @@ async def page_html(url: str) -> tuple[str, str]:
         current = url
         for _ in range(5):
             validate_external_url(current)
+            import outbound_security
+            pinned_url, pinned_headers, pinned_extensions = outbound_security.pinned_request(current)
             profiles = _page_profiles(current)
             for attempt, headers in enumerate(profiles):
                 try:
-                    async with client.stream("GET", current, headers=headers) as resp:
+                    async with client.stream("GET", pinned_url, headers={**headers, **pinned_headers}, extensions=pinned_extensions) as resp:
                         if resp.status_code in (301, 302, 303, 307, 308):
                             target = resp.headers.get("location")
                             if not target: raise ValueError("Redirect without a destination")
