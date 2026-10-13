@@ -264,7 +264,7 @@ def test_updater_reports_runtime_and_docker_versions(family):
     c,admin,_=family
     response=c.get('/api/v2/admin/updates/status',headers=admin)
     assert response.status_code==200
-    assert response.json()['running_version']=='2.2.11'
+    assert response.json()['running_version']=='2.2.12'
     assert 'image_version' in response.json()
 
 
