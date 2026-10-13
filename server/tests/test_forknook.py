@@ -120,7 +120,7 @@ def test_web_pwa_assets_and_legacy(client):
     c,h=client
     assert c.get('/').status_code==200
     html=c.get('/app/')
-    assert html.status_code==200 and 'Forknook' in html.text
+    assert html.status_code==200 and 'RecipeCove' in html.text
     assert 'default-src' in html.headers['content-security-policy']
     assert c.get('/app/manifest.json').status_code==200
     assert c.get('/app/forknook.js').status_code==200
