@@ -489,6 +489,140 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
             if existing:
                 skipped+=1
                 # A repeat import can repair missing photos without replacing edits.
+                if not body.dry_run:
+                    saved=json.loads(existing['data'])
+                    changed=False
+                    previous=str(saved.get('image_url') or '')
+                    if item.image_url and not previous.startswith('/api/v2/images/'):
+                        if str(item.image_url).startswith('/api/v2/images/'):
+                            saved['image_url']=item.image_url
+                            changed=True
+                    for key in ('ingredients','instructions','notes'):
+                        fresh=getattr(item,key,None)
+                        if fresh and not saved.get(key):
+                            saved[key]=fresh
+                            changed=True
+                    # Repair previously imported Markdown headings, not subsequent
+                    # user edits to an ordinary description.
+                    old_description=str(saved.get('description') or '')
+                    if re.search(r'(?im)^\\s*#{1,6}\\s+(?:Ingredients|Instructions|Directions|Steps|Method)\\s*
+            else:new.append((ref,item))
+        if body.dry_run:
+            return {'dry_run':True,'found':len(data),'valid':len(items),'invalid':invalid,
+                    'would_import':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                    'unavailable_ids':unavailable_ids,'source_unchanged':True}
+        now=time.time()
+        for ref,item in new:
+            db.execute('''INSERT INTO recipes(title,data,created_by,created_at,updated_at,external_ref)
+                 VALUES(?,?,?,?,?,?)''',(item.title,item.model_dump_json(),who['id'],now,now,ref))
+        db.execute('INSERT INTO migration_runs(source,attempted,imported,skipped,created_at) VALUES (?,?,?,?,?)',
+                   ('kitchenowl:'+source_id+':'+str(body.household_id),len(items),len(new),skipped+invalid+len(unavailable_ids),time.time()))
+        return {'dry_run':False,'found':len(data),'valid':len(items),'invalid':invalid,
+                'imported':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                'unavailable_ids':unavailable_ids,'source_unchanged':True}
+,full)
+    summary=parts[0].strip()
+    embedded_steps=[]
+    embedded_notes=[]
+    for index in range(1,len(parts)-1,2):
+        heading=parts[index].casefold()
+        section=parts[index+1].strip()
+        if heading=='notes':
+            if section:embedded_notes.append(section)
+        else:
+            for line in section.splitlines():
+                line=re.sub(r'^\s*(?:\d+[.)]|[-*•])\s+','',line).strip()
+                if line:embedded_steps.append(line)
+    steps=record.get('instructions') or record.get('steps') or embedded_steps
+    if isinstance(steps,str):steps=[x.strip() for x in steps.splitlines() if x.strip()]
+    if isinstance(steps,list):
+        steps=[str(x.get('text') or x.get('description') or '') if isinstance(x,dict) else str(x) for x in steps]
+    else:steps=[]
+    notes='\n\n'.join(x for x in (str(record.get('notes') or '').strip(),*embedded_notes) if x)
+    photo=record.get('image_url') or record.get('photo') or record.get('image') or record.get('picture') or ''
+    if isinstance(photo,dict):photo=photo.get('url') or photo.get('src') or ''
+    if not isinstance(photo,str):photo=''
+    servings=record.get('servings') or record.get('yields') or ''
+    if isinstance(servings,int):servings=str(servings)+' servings'
+    def safe_time(key):
+        try:return max(0,int(record[key])) if record.get(key) is not None else None
+        except (TypeError,ValueError,OverflowError):return None
+    return base.RecipePayload(title=title,image_url=photo[:2000],description=summary[:6000],
+        ingredients=ingredients[:200],instructions=[x.strip()[:3000] for x in steps if x.strip()][:100],
+        notes=notes[:30000],servings=str(servings)[:200] or None,
+        prep_time=safe_time('prep_time'),cook_time=safe_time('cook_time'),
+        total_time=safe_time('total_time') or safe_time('time'),
+        source_url=str(record.get('source_url') or record.get('source') or '')[:2000])
+
+
+@router.post('/admin/kitchenowl/import')
+async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
+    if body.household_id is None:raise HTTPException(422,'Select a KitchenOwl household')
+    origin=ko_origin(body.url)
+    token=validate_kitchenowl_llt(body.token)
+    async with httpx.AsyncClient(timeout=25,trust_env=False,follow_redirects=False) as client:
+        data=await ko_get(client,origin,token,f'/api/household/{body.household_id}/recipe')
+        if isinstance(data,dict):data=data.get('results',data.get('recipes',[]))
+        if not isinstance(data,list):raise HTTPException(502,'KitchenOwl did not return a recipe list')
+        if len(data)>base.MAX_IMPORTED_RECIPES:raise HTTPException(422,'More than 1000 recipes; migrate in batches')
+        items=[];invalid=0;unavailable_ids=[]
+        for summary in data:
+            if not isinstance(summary,dict):invalid+=1;continue
+            item_id=summary.get('id')
+            if not isinstance(item_id,int) or item_id<1:invalid+=1;continue
+            # KitchenOwl lists a household's recipes here, but its DETAIL
+            # endpoint lives at /api/recipe/{id} (no household in path).
+            detail=await ko_get(client,origin,token,f'/api/recipe/{item_id}')
+            if detail is None:
+                unavailable_ids.append(item_id)
+                continue
+            if not isinstance(detail,dict):invalid+=1;continue
+            try:
+                candidate=_ko_recipe(detail)
+                # Some KitchenOwl versions supply the photo only in the list response.
+                if not candidate.image_url:
+                    summary_photo=summary.get('photo') or summary.get('image_url') or summary.get('image') or ''
+                    if isinstance(summary_photo,dict):
+                        summary_photo=summary_photo.get('url') or summary_photo.get('src') or ''
+                    if isinstance(summary_photo,str) and summary_photo:
+                        candidate=candidate.model_copy(update={'image_url':summary_photo[:2000]})
+                photo=candidate.image_url
+                if photo:
+                    parts=urlsplit(photo)
+                    ko_parts=urlsplit(origin)
+                    # Fetch relative or same-origin authenticated KitchenOwl images.
+                    # Never send the KitchenOwl token to a different host.
+                    same_origin=(parts.scheme,parts.netloc)==(ko_parts.scheme,ko_parts.netloc)
+                    relative=not parts.scheme and not parts.netloc and bool(photo.strip())
+                    media_path=(urlsplit('http://placeholder/'+photo.lstrip('/')).path if relative else parts.path if same_origin else '')
+                    if media_path.startswith('/') and not parts.query and '..' not in media_path.split('/'):
+                        try:
+                            async with client.stream('GET',origin+media_path,headers={'Authorization':'Bearer '+token}) as img_response:
+                                if img_response.status_code==200 and img_response.headers.get('content-type','').startswith('image/'):
+                                    buf=bytearray()
+                                    async for chunk in img_response.aiter_bytes():
+                                        buf.extend(chunk)
+                                        if len(buf)>forknook_images.MAX_BYTES:raise ValueError('KitchenOwl image is too large')
+                                    candidate=candidate.model_copy(update={'image_url':forknook_images.store_upload(bytes(buf))})
+                        except (ValueError,httpx.HTTPError,OSError):
+                            pass  # Never block recipe migration because a photo is unavailable.
+                    elif same_origin and photo.startswith('http'):
+                        # Do not preserve an internal KitchenOwl URL if it is not fetchable.
+                        candidate=candidate.model_copy(update={'image_url':photo})
+                items.append((item_id,candidate))
+            except (ValueError,TypeError):invalid+=1
+    if not body.dry_run:
+        items=[(idx, recipe.model_copy(update={'image_url':forknook_images.capture_best_effort(recipe.image_url)})
+                if recipe.image_url else recipe) for idx,recipe in items]
+    source_id=hashlib.sha256(origin.casefold().encode()).hexdigest()[:24]
+    with base.LOCK,base.database() as db:
+        new=[];skipped=0
+        for recipe_id,item in items:
+            ref=f'kitchenowl:{source_id}:{body.household_id}:{recipe_id}'
+            existing=db.execute('SELECT id,data FROM recipes WHERE external_ref=?',(ref,)).fetchone()
+            if existing:
+                skipped+=1
+                # A repeat import can repair missing photos without replacing edits.
                 if not body.dry_run and item.image_url:
                     saved=json.loads(existing['data'])
                     previous=str(saved.get('image_url') or '')
@@ -497,6 +631,26 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
                             saved['image_url']=item.image_url
                             db.execute('UPDATE recipes SET data=?,updated_at=? WHERE id=?',
                                 (json.dumps(saved),time.time(),existing['id']))
+            else:new.append((ref,item))
+        if body.dry_run:
+            return {'dry_run':True,'found':len(data),'valid':len(items),'invalid':invalid,
+                    'would_import':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                    'unavailable_ids':unavailable_ids,'source_unchanged':True}
+        now=time.time()
+        for ref,item in new:
+            db.execute('''INSERT INTO recipes(title,data,created_by,created_at,updated_at,external_ref)
+                 VALUES(?,?,?,?,?,?)''',(item.title,item.model_dump_json(),who['id'],now,now,ref))
+        db.execute('INSERT INTO migration_runs(source,attempted,imported,skipped,created_at) VALUES (?,?,?,?,?)',
+                   ('kitchenowl:'+source_id+':'+str(body.household_id),len(items),len(new),skipped+invalid+len(unavailable_ids),time.time()))
+        return {'dry_run':False,'found':len(data),'valid':len(items),'invalid':invalid,
+                'imported':len(new),'already_imported':skipped,'unavailable':len(unavailable_ids),
+                'unavailable_ids':unavailable_ids,'source_unchanged':True}
+,old_description):
+                        saved['description']=item.description
+                        changed=True
+                    if changed:
+                        db.execute('UPDATE recipes SET data=?,updated_at=? WHERE id=?',
+                            (json.dumps(saved),time.time(),existing['id']))
             else:new.append((ref,item))
         if body.dry_run:
             return {'dry_run':True,'found':len(data),'valid':len(items),'invalid':invalid,
