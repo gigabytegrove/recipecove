@@ -69,7 +69,7 @@ async function navigate(page,{push=true,detail=null}={}){
  }catch(e){content.replaceChildren(node('div',{class:'warning',text:e.message}));announce(e.message,true)}
 }
 async function renderAbout(){
- const about=card(node('div',{class:'about-brand'},node('img',{src:'/app/recipecove-logo.svg',alt:'RecipeCove by Gigabyte Grove'})),
+ const about=card(node('div',{class:'about-brand'},node('img',{src:'/app/recipecove-logo.webp',alt:'RecipeCove by Gigabyte Grove'})),
   node('h2',{text:'About RecipeCove'}),
   node('p',{text:'RecipeCove is a family recipe management system developed and released by Gigabyte Grove. It brings recipes, planning what to make, and shopping lists together in one self-hosted kitchen.'}),
   node('h3',{text:'Built for your kitchen'}),
