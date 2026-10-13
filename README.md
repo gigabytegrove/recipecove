@@ -2,7 +2,7 @@
 
 Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
 
-**Release: 2.2.5 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.2.6 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -96,11 +96,11 @@ X-Forknook-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.2.5 stable)
+## Native Kotlin Android client (2.2.6 stable)
 
 Forknook's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses Forknook's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved Forknook launcher branding.
 
-Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored Forknook server URL when possible, but users must sign in again with their Forknook account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.2.5**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
+Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored Forknook server URL when possible, but users must sign in again with their Forknook account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.2.6**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
 
 To build on the same Windows PC as Calden, open PowerShell:
 
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
 ```
 
-The local debug APK is `android/app/build/outputs/versioned/Forknook-v2.2.5-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.2.5 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
+The local debug APK is `android/app/build/outputs/versioned/Forknook-v2.2.6-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.2.6 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
 
 ## Tests and limitations
 
@@ -154,21 +154,26 @@ Combined discovery searches use public WordPress REST search APIs from Spend Wit
 
 ## Version alignment
 
-Web/PWA and server release **v2.2.5 stable** and Android **v2.2.5 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.2.5-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
+Web/PWA and server release **v2.2.6 stable** and Android **v2.2.6 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.2.6-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
 
 
-### Android branding and safe-area layout (2.2.5)
+### Android branding and safe-area layout (2.2.6)
 The native Android sign-in and top bar now display the existing approved Forknook PNG logo from the web application (same exact image, unmodified). The green header is replaced by a white header on a warm cream background with terracotta primary actions. Android 15 edge-to-edge rendering uses dark status/navigation icons and Compose `WindowInsets.safeDrawing` once at the application root. The nested Scaffold and NavigationBar do not consume system insets twice. The header therefore appears beneath the phone's clock and notification icons, and content remains within the usable screen bounds. Validate final appearance on actual phones.
 
 
-### Android Share-to-Forknook support (2.2.5)
+### Android Share-to-Forknook support (2.2.6)
 Forknook's native Kotlin Android client registers for Android ACTION_SEND text/HTML, images, and video, plus ACTION_SEND_MULTIPLE media shares and Instagram HTTPS Reel/post ACTION_VIEW links. Android's system Share menu—not a button inside Forknook—shows the Forknook destination where the originating app allows it. On receipt the client retains the shared URL/text/content URI, asks for native Forknook login when necessary, displays an Import shared recipe progress screen, sends the source to Forknook's own parsing API, and opens a review/edit screen. Failed extraction retains the incoming share for retry or dismissal. Restricted Instagram posts or inaccessible video sources still cannot be guaranteed extractable; those limitations are reported instead of silently discarding the source. Added Kotlin unit tests for social caption URL extraction to the APK build pipeline. Family approval behavior remains unchanged.
 
 
-## Release 2.2.5 — everyday cooking improvements
+## Release 2.2.6 — everyday cooking improvements
 
 Recipe discovery now offers a read-only preview before importing on web and Android. Android places **Discover** in primary navigation. **Plan to Make** supports choosing a date and, optionally, a meal type. Shopping lists show ingredient names first and preserve the amount separately (for example, **Hot Honey (3 Tbsp)**). Marking an item **Have It** removes it from the active shopping view, while the optional Have It group retains it for undoing the selection.
 
 KitchenOwl re-imports can repair previously missing locally cached photos and restore sectioned Markdown ingredients and instructions when the source provides those fields. Existing edited family recipes are not bulk-overwritten. Migration remains read-only with respect to KitchenOwl. Image restoration is contingent on the source exposing an accessible image URL or authenticated image response; an image cannot be reconstructed when KitchenOwl no longer supplies it.
 
-The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/Forknook-v2.2.5-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/Forknook-v2.2.6-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+
+
+## Release 2.2.6 — web session persistence fix
+
+The web client now retains a validated login across browser refreshes using durable same-origin storage. Previously authenticated sessions are migrated on successful verification. Only an authentication rejection invalidates a stored login; transient connection errors or page rendering failures no longer clear it. Logging out still removes the stored token and revokes the server-side session.
