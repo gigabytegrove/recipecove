@@ -460,10 +460,12 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
                     # Never send the KitchenOwl token to a different host.
                     same_origin=(parts.scheme,parts.netloc)==(ko_parts.scheme,ko_parts.netloc)
                     relative=not parts.scheme and not parts.netloc and bool(photo.strip())
-                    media_path=(urlsplit('http://placeholder/'+photo.lstrip('/')).path if relative else parts.path if same_origin else '')
-                    if media_path.startswith('/') and not parts.query and '..' not in media_path.split('/'):
+                    media_path=(('/'+photo.lstrip('/')) if relative else parts.path if same_origin else '')
+                    media_query=parts.query if (relative or same_origin) else ''
+                    if media_path.startswith('/') and '..' not in media_path.split('/') and not parts.fragment and not body.dry_run:
                         try:
-                            async with client.stream('GET',origin+media_path,headers={'Authorization':'Bearer '+token}) as img_response:
+                            image_request=origin+media_path+('?' + media_query if media_query else '')
+                            async with client.stream('GET',image_request,headers={'Authorization':'Bearer '+token}) as img_response:
                                 if img_response.status_code==200 and img_response.headers.get('content-type','').startswith('image/'):
                                     buf=bytearray()
                                     async for chunk in img_response.aiter_bytes():
