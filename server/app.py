@@ -387,7 +387,7 @@ def forknook_asset(asset_name:str):
     names={"forknook.css":"text/css","forknook.js":"text/javascript",
            "sw.js":"text/javascript", "manifest.json":"application/manifest+json",
            "icon-192.png":"image/png","icon-512.png":"image/png",
-           "forknook-logo.png":"image/png", "recipecove-icon.svg":"image/svg+xml", "recipecove-logo.svg":"image/svg+xml", "recipecove-icon.webp":"image/webp", "recipecove-appicon-192.webp":"image/webp", "recipecove-icon.webp":"image/webp", "recipecove-logo.webp":"image/webp"}
+           "forknook-logo.png":"image/png", "recipecove-icon.svg":"image/svg+xml", "recipecove-logo.svg":"image/svg+xml", "recipecove-icon.webp":"image/webp", "recipecove-appicon-192.webp":"image/webp", "recipecove-appicon-512.webp":"image/webp", "recipecove-icon.webp":"image/webp", "recipecove-logo.webp":"image/webp"}
     if asset_name not in names:
         if _FORK_PATH.fullmatch(asset_name):
             return FileResponse(DATA / "web" / "forknook.html", media_type="text/html", headers=_FORK_HEADERS)
