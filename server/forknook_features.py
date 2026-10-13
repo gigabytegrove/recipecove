@@ -399,6 +399,19 @@ def _ko_recipe(record:dict)->base.RecipePayload:
             for line in section.splitlines():
                 line=re.sub(r'^\s*(?:\d+[.)]|[-*•])\s+','',line).strip()
                 if line:embedded_steps.append(line)
+    if not embedded_steps and '\n\n' in full:
+        # KitchenOwl exports often have an introductory paragraph followed by
+        # plain-text directions rather than a Markdown Instructions heading.
+        intro, remainder=full.split('\n\n',1)
+        action=re.compile(r'^(?:in |add |mix |stir |place |heat |cook |bake |preheat |pour |'
+                          r'combine |remove |transfer |knead |roll |fill |cut |'
+                          r'whisk |melt |serve |brush |cover |let |put |'
+                          r'beat |mash |soften |gather |wash |drain |'
+                          r'using |while |once |after |when |working )',re.I)
+        candidate_lines=[line.strip() for line in remainder.splitlines() if line.strip()]
+        if candidate_lines and sum(bool(action.match(line)) for line in candidate_lines)>=2:
+            summary=intro.strip()
+            embedded_steps=candidate_lines
     steps=record.get('instructions') or record.get('steps') or embedded_steps
     if isinstance(steps,str):steps=[x.strip() for x in steps.splitlines() if x.strip()]
     if isinstance(steps,list):
