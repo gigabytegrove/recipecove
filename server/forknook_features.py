@@ -488,15 +488,25 @@ async def kitchenowl_import(body:KitchenOwlSource,who:dict=Depends(base.admin)):
             existing=db.execute('SELECT id,data FROM recipes WHERE external_ref=?',(ref,)).fetchone()
             if existing:
                 skipped+=1
-                # A repeat import can repair missing photos without replacing edits.
-                if not body.dry_run and item.image_url:
+                # Repair missing import fields, preserving existing family edits.
+                if not body.dry_run:
                     saved=json.loads(existing['data'])
+                    changed=False
                     previous=str(saved.get('image_url') or '')
-                    if not previous or not previous.startswith('/api/v2/images/'):
-                        if str(item.image_url).startswith('/api/v2/images/'):
-                            saved['image_url']=item.image_url
-                            db.execute('UPDATE recipes SET data=?,updated_at=? WHERE id=?',
-                                (json.dumps(saved),time.time(),existing['id']))
+                    if str(item.image_url).startswith('/api/v2/images/') and not previous.startswith('/api/v2/images/'):
+                        saved['image_url']=item.image_url
+                        changed=True
+                    for field in ('ingredients','instructions','notes'):
+                        if not saved.get(field) and getattr(item,field,None):
+                            saved[field]=getattr(item,field)
+                            changed=True
+                    old_description=str(saved.get('description') or '')
+                    if ('## Instructions' in old_description or '## Ingredients' in old_description) and item.description:
+                        saved['description']=item.description
+                        changed=True
+                    if changed:
+                        db.execute('UPDATE recipes SET data=?,updated_at=? WHERE id=?',
+                            (json.dumps(saved),time.time(),existing['id']))
             else:new.append((ref,item))
         if body.dry_run:
             return {'dry_run':True,'found':len(data),'valid':len(items),'invalid':invalid,
