@@ -1,8 +1,8 @@
-# Forknook · family recipe manager
+# RecipeCove · family recipe manager
 
-Forknook is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with Forknook.
+RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.2.13 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.0 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -60,7 +60,7 @@ curl -fL --retry 3 -o /tmp/forknook-update.sh \
 bash -n /tmp/forknook-update.sh && sudo bash /tmp/forknook-update.sh
 ```
 
-The script identifies exactly one running Forknook Compose service, validates the Compose project and image, pulls the image, recreates **the existing service** without deleting volumes, waits for the intended release health version, and attempts to restore the prior image on startup failure. Read the script before running it. The original KitchenOwl container/database is never touched.
+The script identifies exactly one running RecipeCove Compose service, validates the Compose project and image, pulls the image, recreates **the existing service** without deleting volumes, waits for the intended release health version, and attempts to restore the prior image on startup failure. Read the script before running it. The original KitchenOwl container/database is never touched.
 
 ## Family workflow
 
@@ -71,16 +71,16 @@ The script identifies exactly one running Forknook Compose service, validates th
 
 ## KitchenOwl migration (copy-only)
 
-Open **Administration → Imports & feeds** (`/app/admin/imports`). Provide the KitchenOwl instance's base URL and its authorized long-lived access token, load its households and select one. First choose **Preview migration**, then review the counts and choose **Copy recipes** if you want to proceed. The migration reads the household's recipe list and individual records, preserves compatible ingredient/step fields, copies accessible recipe photos, and keeps external source IDs to prevent re-importing the same KitchenOwl recipe twice. Forknook does **not** change or delete anything in KitchenOwl, and the token is not permanently stored in Forknook. Some proprietary KitchenOwl metadata or inaccessible image endpoints may require manual review. Repeat the process for each household, then compare the migrated collection against KitchenOwl before decommissioning it. JSON export import remains under **Administration → Backups**.
+Open **Administration → Imports & feeds** (`/app/admin/imports`). Provide the KitchenOwl instance's base URL and its authorized long-lived access token, load its households and select one. First choose **Preview migration**, then review the counts and choose **Copy recipes** if you want to proceed. The migration reads the household's recipe list and individual records, preserves compatible ingredient/step fields, copies accessible recipe photos, and keeps external source IDs to prevent re-importing the same KitchenOwl recipe twice. RecipeCove does **not** change or delete anything in KitchenOwl, and the token is not permanently stored in RecipeCove. Some proprietary KitchenOwl metadata or inaccessible image endpoints may require manual review. Repeat the process for each household, then compare the migrated collection against KitchenOwl before decommissioning it. JSON export import remains under **Administration → Backups**.
 
 
 ## Self-contained application updates
 
-Go to **Administration → Updates** (`/app/admin/updates`). Forknook checks published GitHub Releases, downloads a checksum-verified server/UI package into the existing `/data/updates` directory, verifies file paths and runtime compatibility, and asks its built-in launcher to restart the application. An unsuccessful start triggers automatic rollback. The `/data` family database and photos are preserved. **No Docker socket, platform API, additional service or second container is involved.**
+Go to **Administration → Updates** (`/app/admin/updates`). RecipeCove checks published GitHub Releases, downloads a checksum-verified server/UI package into the existing `/data/updates` directory, verifies file paths and runtime compatibility, and asks its built-in launcher to restart the application. An unsuccessful start triggers automatic rollback. The `/data` family database and photos are preserved. **No Docker socket, platform API, additional service or second container is involved.**
 
-Application and PWA code are updateable inside the container as long as they remain compatible with the installed runtime. Changes requiring a different base image, operating-system packages, or launcher cannot be performed by an unprivileged container without intervention from the host runtime. Forknook reports such a release as incompatible rather than claiming the image itself was updated. For ordinary feature releases, keep runtime dependencies stable to preserve full in-app upgradeability.
+Application and PWA code are updateable inside the container as long as they remain compatible with the installed runtime. Changes requiring a different base image, operating-system packages, or launcher cannot be performed by an unprivileged container without intervention from the host runtime. RecipeCove reports such a release as incompatible rather than claiming the image itself was updated. For ordinary feature releases, keep runtime dependencies stable to preserve full in-app upgradeability.
 
-The obsolete deployment-platform integration, credentials, UI controls and REST endpoints were removed. On startup, Forknook deletes only the obsolete saved integration credential file; accounts, recipes, shopping lists, photos and update history are untouched.
+The obsolete deployment-platform integration, credentials, UI controls and REST endpoints were removed. On startup, RecipeCove deletes only the obsolete saved integration credential file; accounts, recipes, shopping lists, photos and update history are untouched.
 
 ## Developer API / future integrations
 
@@ -91,16 +91,16 @@ GET /api/v2/public/recipes?page=1&limit=20&q=soup
 GET /api/v2/public/recipes/{recipe_id}
 GET /api/v2/public/recipes/{recipe_id}/image
 GET /api/v2/openapi.json
-X-Forknook-API-Key: fnk_<secret>
+X-RecipeCove-API-Key: fnk_<secret>
 ```
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.2.13 stable)
+## Native Kotlin Android client (2.3.0 stable)
 
-Forknook's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses Forknook's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved Forknook launcher branding.
+RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
-Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored Forknook server URL when possible, but users must sign in again with their Forknook account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.2.13**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
+Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored RecipeCove server URL when possible, but users must sign in again with their RecipeCove account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.3.0**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
 
 To build on the same Windows PC as Calden, open PowerShell:
 
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
 ```
 
-The local debug APK is `android/app/build/outputs/versioned/Forknook-v2.2.13-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.2.13 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
+The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.0-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.0 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
 
 ## Tests and limitations
 
@@ -124,7 +124,7 @@ python -m pytest -q server/tests
 node --check server/web/forknook.js
 ```
 
-Integration tests validate roles, permissions, reviews, migration idempotency, image storage/authorization, publishing, default categories, and routing. Browser/device interaction and real-world KitchenOwl/photo/social-media fetching must still be verified against your actual server and family devices before classifying the release as production-ready. When a site refuses photo downloads, Forknook preserves the recipe but may leave its picture as a placeholder.
+Integration tests validate roles, permissions, reviews, migration idempotency, image storage/authorization, publishing, default categories, and routing. Browser/device interaction and real-world KitchenOwl/photo/social-media fetching must still be verified against your actual server and family devices before classifying the release as production-ready. When a site refuses photo downloads, RecipeCove preserves the recipe but may leave its picture as a placeholder.
 
 ## Discover recipes / searchable recipe directories
 
@@ -132,13 +132,13 @@ Open **Discover recipes** (`/app/discover`) to search the Wikibooks Cookbook or 
 
 **TheMealDB** supplies structured ingredients and photos. Its public V1 key `1` is for personal/development/testing use; for publicly distributed products, the catalog requires a supporter key, configurable as `FORKNOOK_MEALDB_KEY`. Wikibooks uses its openly available community recipe search and may need manual cleanup because page formatting varies; retain source attribution. These sources require internet connectivity and are optional. RSS/Atom subscriptions remain under **Administration → Imports & feeds**, not in the main recipe discovery browser.
 
-When troubleshooting the KitchenOwl migration, a 422 from `/api/household` generally means KitchenOwl rejected the long-lived token (JWT validation). Generate the token within the same KitchenOwl instance, paste only the token, and use that instance's API-accessible URL. Forknook does not retain that token.
+When troubleshooting the KitchenOwl migration, a 422 from `/api/household` generally means KitchenOwl rejected the long-lived token (JWT validation). Generate the token within the same KitchenOwl instance, paste only the token, and use that instance's API-accessible URL. RecipeCove does not retain that token.
 
 The **Administration → Updates** screen distinguishes running server code, embedded image version, and persisted updater state. Application updates require a published checksum-verified release; the built-in updater never controls the host container runtime.
 
 ## KitchenOwl long-lived token diagnostics
 
-Forknook locally checks JWT formatting and a complete HMAC signature segment before contacting KitchenOwl. This is a formatting check, not verification of authenticity. Known KitchenOwl validation errors, including signature errors and numeric JWT subject compatibility, are shown without echoing the token. Copy the entire LLT from KitchenOwl and revoke any token exposed in chat or logs. Import is read-only and copy-first.
+RecipeCove locally checks JWT formatting and a complete HMAC signature segment before contacting KitchenOwl. This is a formatting check, not verification of authenticity. Known KitchenOwl validation errors, including signature errors and numeric JWT subject compatibility, are shown without echoing the token. Copy the entire LLT from KitchenOwl and revoke any token exposed in chat or logs. Import is read-only and copy-first.
 
 ## Expanded discovery (2.1.8)
 
@@ -154,56 +154,63 @@ Combined discovery searches use public WordPress REST search APIs from Spend Wit
 
 ## Version alignment
 
-Web/PWA and server release **v2.2.13 stable** and Android **v2.2.13 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.2.13-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
+Web/PWA and server release **v2.3.0 stable** and Android **v2.3.0 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.3.0-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
 
 
-### Android branding and safe-area layout (2.2.13)
-The native Android sign-in and top bar now display the existing approved Forknook PNG logo from the web application (same exact image, unmodified). The green header is replaced by a white header on a warm cream background with terracotta primary actions. Android 15 edge-to-edge rendering uses dark status/navigation icons and Compose `WindowInsets.safeDrawing` once at the application root. The nested Scaffold and NavigationBar do not consume system insets twice. The header therefore appears beneath the phone's clock and notification icons, and content remains within the usable screen bounds. Validate final appearance on actual phones.
+### Android branding and safe-area layout (2.3.0)
+The native Android sign-in and top bar now display the existing approved RecipeCove PNG logo from the web application (same exact image, unmodified). The green header is replaced by a white header on a warm cream background with terracotta primary actions. Android 15 edge-to-edge rendering uses dark status/navigation icons and Compose `WindowInsets.safeDrawing` once at the application root. The nested Scaffold and NavigationBar do not consume system insets twice. The header therefore appears beneath the phone's clock and notification icons, and content remains within the usable screen bounds. Validate final appearance on actual phones.
 
 
-### Android Share-to-Forknook support (2.2.13)
-Forknook's native Kotlin Android client registers for Android ACTION_SEND text/HTML, images, and video, plus ACTION_SEND_MULTIPLE media shares and Instagram HTTPS Reel/post ACTION_VIEW links. Android's system Share menu—not a button inside Forknook—shows the Forknook destination where the originating app allows it. On receipt the client retains the shared URL/text/content URI, asks for native Forknook login when necessary, displays an Import shared recipe progress screen, sends the source to Forknook's own parsing API, and opens a review/edit screen. Failed extraction retains the incoming share for retry or dismissal. Restricted Instagram posts or inaccessible video sources still cannot be guaranteed extractable; those limitations are reported instead of silently discarding the source. Added Kotlin unit tests for social caption URL extraction to the APK build pipeline. Family approval behavior remains unchanged.
+### Android Share-to-RecipeCove support (2.3.0)
+RecipeCove's native Kotlin Android client registers for Android ACTION_SEND text/HTML, images, and video, plus ACTION_SEND_MULTIPLE media shares and Instagram HTTPS Reel/post ACTION_VIEW links. Android's system Share menu—not a button inside RecipeCove—shows the RecipeCove destination where the originating app allows it. On receipt the client retains the shared URL/text/content URI, asks for native RecipeCove login when necessary, displays an Import shared recipe progress screen, sends the source to RecipeCove's own parsing API, and opens a review/edit screen. Failed extraction retains the incoming share for retry or dismissal. Restricted Instagram posts or inaccessible video sources still cannot be guaranteed extractable; those limitations are reported instead of silently discarding the source. Added Kotlin unit tests for social caption URL extraction to the APK build pipeline. Family approval behavior remains unchanged.
 
 
-## Release 2.2.13 — everyday cooking improvements
+## Release 2.3.0 — everyday cooking improvements
 
 Recipe discovery now offers a read-only preview before importing on web and Android. Android places **Discover** in primary navigation. **Plan to Make** supports choosing a date and, optionally, a meal type. Shopping lists show ingredient names first and preserve the amount separately (for example, **Hot Honey (3 Tbsp)**). Marking an item **Have It** removes it from the active shopping view, while the optional Have It group retains it for undoing the selection.
 
 KitchenOwl re-imports can repair previously missing locally cached photos and restore sectioned Markdown ingredients and instructions when the source provides those fields. Existing edited family recipes are not bulk-overwritten. Migration remains read-only with respect to KitchenOwl. Image restoration is contingent on the source exposing an accessible image URL or authenticated image response; an image cannot be reconstructed when KitchenOwl no longer supplies it.
 
-The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/Forknook-v2.2.13-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.0-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
 
 
-## Release 2.2.13 — web session persistence fix
+## Release 2.3.0 — web session persistence fix
 
 The web client now retains a validated login across browser refreshes using durable same-origin storage. Previously authenticated sessions are migrated on successful verification. Only an authentication rejection invalidates a stored login; transient connection errors or page rendering failures no longer clear it. Logging out still removes the stored token and revokes the server-side session.
 
 
-## 2.2.13 production UI review
+## 2.3.0 production UI review
 
 The web sidebar and dashboard use **Plan to Make** terminology, and recipe cards truncate descriptions at a word boundary with an ellipsis. KitchenOwl migration now accepts authenticated same-origin photo URLs with query parameters and does not fetch or cache photographs during migration previews. Previously missing photographs still require a real re-import with valid KitchenOwl credentials and accessible source media. Existing images cannot be fabricated from absent originals.
 
 
-## Version 2.2.13 — KitchenOwl export repair
+## Version 2.3.0 — KitchenOwl export repair
 
 The KitchenOwl JSON importer now uses the same source-aware converter as the live API migration. Instead of throwing away ingredients, instructions, notes, time information, and image metadata, it retains compatible fields. Existing imported records can be repaired from an original KitchenOwl JSON export through **Administration → Backups → Repair imported recipes**. Repairs fill missing structured directions and other empty fields; an unchanged original description can be separated into a summary and cooking steps. The operation does not overwrite edited descriptions or existing populated fields. Source photos identified only by bare filenames remain unresolved until the original KitchenOwl media bytes can be retrieved. Migration never invents media URLs or images. Review preview and back up /data before bulk repair.
 
 
-## 2.2.13 — Review-first recovery from original recipe pages
+## 2.3.0 — Review-first recovery from original recipe pages
 
-Approvers and administrators can open any saved recipe with an HTTP(S) source URL and select **Recover from original source**. Forknook uses the existing structured website importer, prefers a longer ingredient list or directions list from the source, retains the existing recipe ID and filled fields, and opens the edit form for explicit review. Nothing is saved until the user submits the existing editor. This is intended for incomplete KitchenOwl exports where ingredient quantities exist on the original recipe page but not in the JSON export. It cannot recover an unavailable or inaccessible website, and users must verify accuracy before saving.
-
-
-## 2.2.13 — About page and CSP compliance
-
-Added an About Forknook page in desktop and mobile web navigation, with brand identity, publisher, self-hosting/privacy information and GitHub link. Replaced all three web JavaScript-generated inline `style` attributes with stylesheet classes to comply with `style-src 'self'` without relaxing the content security policy. This removes the browser console errors from the administration and update progress panels.
+Approvers and administrators can open any saved recipe with an HTTP(S) source URL and select **Recover from original source**. RecipeCove uses the existing structured website importer, prefers a longer ingredient list or directions list from the source, retains the existing recipe ID and filled fields, and opens the edit form for explicit review. Nothing is saved until the user submits the existing editor. This is intended for incomplete KitchenOwl exports where ingredient quantities exist on the original recipe page but not in the JSON export. It cannot recover an unavailable or inaccessible website, and users must verify accuracy before saving.
 
 
-## 2.2.13 — audit baseline route and CSP regression protection
+## 2.3.0 — About page and CSP compliance
+
+Added an About RecipeCove page in desktop and mobile web navigation, with brand identity, publisher, self-hosting/privacy information and GitHub link. Replaced all three web JavaScript-generated inline `style` attributes with stylesheet classes to comply with `style-src 'self'` without relaxing the content security policy. This removes the browser console errors from the administration and update progress panels.
+
+
+## 2.3.0 — audit baseline route and CSP regression protection
 
 Adds direct-page support for /app/about and regression tests that ensure unrecognized routes are rejected and the strict style CSP remains in force. A full static source security audit, risk register and remaining priorities are in SECURITY_AUDIT_2026-10-13.md. The audit identifies security work still required; this maintenance release does not claim those risks are solved.
 
 
-## 2.2.13 — Security hardening
+## 2.3.0 — Security hardening
 
 External recipe and image fetches now pin connections to public validated addresses, preserving HTTPS SNI and checking redirects. Android HTTP logins require explicit per-origin risk acceptance; Android session tokens migrate to Keystore AES-GCM encrypted storage. Web HTTP sessions also require explicit per-origin risk acceptance. Server CI tokens now use least privilege and immutable action revisions. A weekly dependency security scanning workflow has been added. Security work still outstanding includes browser HttpOnly cookie migration, fully deterministic runtime images, and on-deployment penetration testing.
+
+
+## RecipeCove rename rollout (2.3.0)
+
+**Do not rename the existing GitHub repository until RecipeCove 2.3.0 is installed and verified in your running instance.** Version 2.3.0 contains an updater bridge that first checks the future RecipeCove repository and falls back to the current repository during migration. The first 2.3.0 GitHub release must publish **both** RecipeCove and legacy Forknook server asset filenames so the existing updater can install it. The REST API path `/api/v2`, database schema, saved recipe photographs, user identities, Android package identifier and Android session storage names remain unchanged for upgrade compatibility. They are internal compatibility identifiers, not user-facing branding. The existing Compose data volume and service key stay unchanged deliberately to prevent losing persisted data. After installation and repo rename, future releases use the new URL and product name.
+
+The approved new artwork is derived from the supplied RecipeCove logo; web assets are `recipecove-logo.svg` and `recipecove-icon.svg`. The native Android app uses a VectorDrawable emblem.
