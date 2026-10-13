@@ -565,11 +565,11 @@ def remove_item(list_id:int,item_id:int,who:dict=Depends(principal)):
     return {"success":True}
 
 _AMOUNT_PREFIX = re.compile(
-    r"^\\s*(?P<amount>(?:\\d+(?:[.,/]\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\\s+(?:\\d+/\\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))?)"
-    r"(?:\\s+(?P<unit>tablespoons?|tbsp\\.?|teaspoons?|tsp\\.?|cups?|c\\.|"
-    r"ounces?|oz\\.?|pounds?|lbs?\\.?|grams?|g|kilograms?|kg|"
+    r"^\s*(?P<amount>(?:\d+(?:[.,/]\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s+(?:\d+/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))?)"
+    r"(?:\s+(?P<unit>tablespoons?|tbsp\.?|teaspoons?|tsp\.?|cups?|c\.|"
+    r"ounces?|oz\.?|pounds?|lbs?\.?|grams?|g|kilograms?|kg|"
     r"milliliters?|ml|liters?|l|cloves?|cans?|packages?|packets?|"
-    r"pinches?|slices?|pieces?|stalks?|bunches?))?\\s+(?:of\\s+)?",
+    r"pinches?|slices?|pieces?|stalks?|bunches?))?\s+(?:of\s+)?",
     re.IGNORECASE,
 )
 _UNIT_SHORT = {"tablespoon":"Tbsp","tablespoons":"Tbsp","tbsp":"Tbsp","teaspoon":"tsp",
@@ -589,7 +589,7 @@ def shopping_ingredient(value):
     else:
         return "", ""
     raw=re.sub(r"[*_`]+", "", raw).strip()
-    raw=re.sub(r"\\s*\\(optional\\)\\s*$", "", raw, flags=re.IGNORECASE).strip()
+    raw=re.sub(r"\s*\(optional\)\s*$", "", raw, flags=re.IGNORECASE).strip()
     match=_AMOUNT_PREFIX.match(raw)
     if match:
         if not qty:qty=match.group("amount")
