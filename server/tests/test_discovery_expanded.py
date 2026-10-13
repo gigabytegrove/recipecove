@@ -83,6 +83,7 @@ def test_publisher_name_search_both_example_dishes(family,monkeypatch):
         if 'budgetbytes' in url:
             return [{'id':8,'title':'Easy Sesame Chicken','url':'https://www.budgetbytes.com/easy-sesame-chicken/'}]
         if 'skinnytaste' in url:return []
+        if '/wp-json/wp/v2/search' in url:return []
         if 'themealdb' in url:return {'meals':None}
         if 'wikibooks' in url:return {'query':{'search':[]}}
         raise AssertionError(url)
@@ -92,7 +93,7 @@ def test_publisher_name_search_both_example_dishes(family,monkeypatch):
                           params={'provider':'all','mode':'name','q':title})
         assert result.status_code==200,result.text
         data=result.json()
-        assert data['sources_searched']==6 and data['items']
+        assert data['sources_searched']==10 and data['items']
         assert any(title in item['title'].lower() for item in data['items'])
     result=client.get('/api/v2/discovery/search',headers=admin,
                       params={'provider':'budgetbytes','mode':'name','q':'sesame chicken'})

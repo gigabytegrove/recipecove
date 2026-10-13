@@ -27,6 +27,11 @@ WP_SITES = {
     'budgetbytes': ('Budget Bytes','www.budgetbytes.com'),
     'spendwithpennies': ('Spend With Pennies','www.spendwithpennies.com'),
     'skinnytaste': ('Skinnytaste','www.skinnytaste.com'),
+    'thechunkychef': ('The Chunky Chef','www.thechunkychef.com'),
+    'wellplated': ('Well Plated','www.wellplated.com'),
+    'therecipecritic': ('The Recipe Critic','www.therecipecritic.com'),
+    'saltandlavender': ('Salt & Lavender','www.saltandlavender.com'),
+    'ambitiouskitchen': ('Ambitious Kitchen','www.ambitiouskitchen.com'),
 }
 PROVIDERS = [
     {'id':'all','name':'All recipe sources','search_by':['name','ingredient'],
@@ -51,7 +56,8 @@ def _allowed_publisher_url(provider:str,url:str) -> bool:
     if provider not in WP_SITES:return False
     try:
         target=urlsplit(url)
-        return (target.scheme=='https' and target.hostname==WP_SITES[provider][1]
+        return (target.scheme=='https' and target.hostname in (
+                    WP_SITES[provider][1],WP_SITES[provider][1].removeprefix('www.'))
                 and not target.username and not target.password and target.port is None
                 and target.path.startswith('/') and len(url)<=2000
                 and not target.fragment and not target.query)
@@ -129,7 +135,8 @@ async def search(provider:str=Query(...,max_length=30),mode:str=Query('name',max
         return {'provider':provider,'mode':mode,'query':q,'items':items[:40],
                 'notice':'Searches '+label+'\u0027s public articles. Ingredient searches use the publisher\u0027s full-text index; preview retrieves the actual recipe and photo.'}
     if provider=='all':
-        sources=['foodcom','budgetbytes','spendwithpennies','skinnytaste','themealdb','wikibooks']
+        sources=['foodcom','spendwithpennies','skinnytaste','thechunkychef','wellplated',
+                 'therecipecritic','saltandlavender','ambitiouskitchen','themealdb','wikibooks']
         async def fetch(source):
             try:return source,await search(source,mode,term,who)
             except (HTTPException,OSError,ValueError) as exc:
