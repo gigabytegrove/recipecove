@@ -564,6 +564,46 @@ def remove_item(list_id:int,item_id:int,who:dict=Depends(principal)):
         db.execute("DELETE FROM shopping_items WHERE list_id=? AND id=?",(list_id,item_id));db.commit()
     return {"success":True}
 
+_AMOUNT_PREFIX = re.compile(
+    r"^\\s*(?P<amount>(?:\\d+(?:[.,/]\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\\s+(?:\\d+/\\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))?)"
+    r"(?:\\s+(?P<unit>tablespoons?|tbsp\\.?|teaspoons?|tsp\\.?|cups?|c\\.|"
+    r"ounces?|oz\\.?|pounds?|lbs?\\.?|grams?|g|kilograms?|kg|"
+    r"milliliters?|ml|liters?|l|cloves?|cans?|packages?|packets?|"
+    r"pinches?|slices?|pieces?|stalks?|bunches?))?\\s+(?:of\\s+)?",
+    re.IGNORECASE,
+)
+_UNIT_SHORT = {"tablespoon":"Tbsp","tablespoons":"Tbsp","tbsp":"Tbsp","teaspoon":"tsp",
+    "teaspoons":"tsp","cup":"cup","cups":"cups","ounce":"oz","ounces":"oz",
+    "pound":"lb","pounds":"lb","clove":"clove","cloves":"cloves"}
+
+def shopping_ingredient(value):
+    """Normalize a shopping item without discarding the original recipe ingredient."""
+    if isinstance(value,str):
+        raw=value
+        qty=""
+        unit=""
+    elif isinstance(value,dict):
+        raw=str(value.get("name") or value.get("raw") or "")
+        qty=str(value.get("quantity") or "").strip()
+        unit=str(value.get("unit") or "").strip()
+    else:
+        return "", ""
+    raw=re.sub(r"[*_`]+", "", raw).strip()
+    raw=re.sub(r"\\s*\\(optional\\)\\s*$", "", raw, flags=re.IGNORECASE).strip()
+    match=_AMOUNT_PREFIX.match(raw)
+    if match:
+        if not qty:qty=match.group("amount")
+        if not unit:unit=match.group("unit") or ""
+        raw=raw[match.end():].strip()
+    elif qty and raw.lower().startswith((qty+" ").lower()):
+        raw=raw[len(qty):].strip()
+        if unit and raw.lower().startswith((unit+" ").lower()):
+            raw=raw[len(unit):].strip()
+    raw=raw.strip(" ,.-")
+    unit=_UNIT_SHORT.get(unit.lower().rstrip("."),unit)
+    return raw[:500], " ".join(v for v in (qty,unit) if v)[:150]
+
+
 @router.post("/shopping-lists/build",status_code=201)
 def build_shopping_list(body:ShoppingBuild,who:dict=Depends(principal)):
     """Build from chosen recipes; keep quantities as written to avoid unsafe unit conversions."""
@@ -576,15 +616,7 @@ def build_shopping_list(body:ShoppingBuild,who:dict=Depends(principal)):
         for recipe_row in recipes_found:
             values=json.loads(recipe_row["data"]).get("ingredients",[])
             for ingredient in values:
-                if isinstance(ingredient,str):name=ingredient[:500];amount=""
-                elif isinstance(ingredient,dict):
-                    name=str(ingredient.get("name") or ingredient.get("raw") or "")[:500]
-                    quantity=ingredient.get("quantity")
-                    unit=ingredient.get("unit")
-                    amount=" ".join(str(s) for s in (quantity,unit) if s is not None and str(s).strip())[:150]
-                    # Old importers store a complete ingredient sentence in name; preserve it.
-                    if name==str(ingredient.get("raw") or ""):amount=""
-                else:continue
+                name, amount = shopping_ingredient(ingredient)
                 if name.strip():db.execute("""INSERT INTO shopping_items
                   (list_id,name,quantity,recipe_id,position) VALUES (?,?,?,?,?)""",
                   (list_row.lastrowid,name,amount,recipe_row["id"],int(time.time()*1000)))
