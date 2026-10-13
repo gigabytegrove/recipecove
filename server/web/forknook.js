@@ -12,6 +12,8 @@ async function start(){
    // A failed page render, network outage or updater restart must not log out.
    try{
     model.user=await api('/auth/me');
+    localStorage.setItem('forknook-token',model.token);
+    sessionStorage.removeItem('forknook-token');
    }catch(error){
     if(model.token){announce('Unable to verify your session. Please retry when Forknook is available.',true);return}
    }
