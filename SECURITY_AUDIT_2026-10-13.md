@@ -43,3 +43,11 @@
 **P0** Close potential DNS rebinding/SSRF gap before trusting URL imports from untrusted contributors. **P1** Lock down Android HTTP behavior and harden GitHub CI permissions/action pinning; evaluate cookie-based browser sessions. **P2** Add continuous dependency scanning, reverse-proxy-aware throttling, security regression suite and production penetration tests.
 
 **Release rule:** source remediation is not production verification. Each fix must pass CI, be packaged as a new stable version, and then be separately installed/tested on production.
+
+
+## Remediation update: 2.2.13
+
+- Outbound recipe/image requests are pinned to a vetted public address with the original host preserved for HTTPS certificate validation. Redirects are rechecked.
+- Android and web HTTP login flows require explicit per-server risk acceptance; the Android credential is encrypted with Android Keystore.
+- The server CI workflow uses read-only defaults and package-scoped publishing permissions; release actions are pinned. Dependency auditing runs weekly.
+- Open items: browser localStorage bearer sessions, Android build action pins, base image and transitive package reproducibility, reverse-proxy configuration, and live security testing.
