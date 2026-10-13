@@ -115,7 +115,23 @@ async function viewRecipe(id,{push=true}={}){
   if(value)facts.append(node('div',{class:'recipe-fact'},node('span',{text:label}),node('strong',{text:String(value)})));
  }
  const actions=node('div',{class:'recipe-view-actions'},button('← All recipes',()=>navigate('recipes')),
-  ...(model.user.role==='admin'||model.user.role==='approver'?[button('Edit recipe',()=>openEditor(id,null,{push:false}),'primary')]:[]),
+  ...(model.user.role==='admin'||model.user.role==='approver'?[button('Edit recipe',()=>openEditor(id,null,{push:false}),'primary'),
+  ...(item.source_url&&/^https?:\\/\\//i.test(item.source_url)?[button('Recover from original source',async()=>{
+    if(!confirm('Read the original recipe website and prepare suggested corrections? Your saved recipe will not change until you review and save it.'))return;
+    const preview=await api('/imports/preview-url',{method:'POST',data:{url:item.source_url}});
+    const recoveredIngredients=Array.isArray(preview.ingredients)?preview.ingredients:[];
+    const recoveredSteps=Array.isArray(preview.instructions)?preview.instructions:[];
+    const existingIngredients=Array.isArray(item.ingredients)?item.ingredients:[];
+    const existingSteps=Array.isArray(item.instructions)?item.instructions:[];
+    const merged={...item,
+      ingredients:recoveredIngredients.length>existingIngredients.length?recoveredIngredients:existingIngredients,
+      instructions:existingSteps.length>recoveredSteps.length?existingSteps:recoveredSteps,
+      image_url:(item.image_url&&item.image_url.startsWith('/api/v2/images/'))?item.image_url:(preview.image_url||item.image_url),
+      description:item.description||preview.description||'',
+      notes:item.notes||preview.notes||''};
+    await openEditor(id,merged,{push:false});
+    announce('Source suggestions loaded. Review ingredients, directions and photo before saving.');
+  })]:[])]:[]),
   button('Want to make',async()=>{await api('/recipes/'+id+'/state',{method:'PUT',data:{state:'want'}});announce('Added to Want to Make')}),
   button('Made before',async()=>{await api('/recipes/'+id+'/state',{method:'PUT',data:{state:'made'}});announce('Marked as Made Before')}),
   button('Add ingredients to shopping list',async()=>{const name=prompt('Name your shopping list',item.title+' ingredients');if(!name)return;await api('/shopping-lists/build',{method:'POST',data:{recipe_ids:[id],name}});navigate('shopping')},'accent'));
