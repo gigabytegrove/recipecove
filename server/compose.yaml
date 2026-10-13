@@ -1,7 +1,7 @@
 services:
-  forknook:
+  recipecove:
     build: .
-    container_name: forknook
+    container_name: recipecove
     restart: unless-stopped
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
@@ -14,7 +14,7 @@ services:
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8999}:8999"
     volumes:
-      - forknook-data:/data
+      - recipecove-data:/data
       - whisper-models:/models
       - forknook-temp:/tmp
       # Optional authorized Instagram cookie export:
@@ -29,6 +29,8 @@ services:
     mem_limit: 1536m
     memswap_limit: 1536m
 volumes:
-  forknook-data:
+  recipecove-data:
+    external: true
+    name: forknook_forknook-data
   whisper-models:
   forknook-temp:
