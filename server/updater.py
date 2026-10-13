@@ -141,7 +141,7 @@ def check() -> dict:
         result['latest_version'] = release['version']
         result['release_url'] = release['url']
         manifest = json.loads(_https_get(
-            f'https://raw.githubusercontent.com/{release["repo"]}/v{release["version"]}/server/update_release.json',
+            f'https://raw.githubusercontent.com/{release.get("repo", REPO)}/v{release["version"]}/server/update_release.json',
             5000))
         if manifest.get('version') != release['version']:
             raise ValueError('Release metadata version mismatch')
