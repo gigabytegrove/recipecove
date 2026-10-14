@@ -247,7 +247,72 @@ $('recipe-form').addEventListener('submit',async e=>{e.preventDefault();const fo
  $('editor').close();announce(result.pending?'Submitted for approval. The recipe is not in the shared collection yet.':'Recipe saved with its photo');
  if(result.pending){await navigate('review')}else await navigate('recipes',{detail:result.id||model.editing})
  }catch(err){announce(err.message,true)}});
-async function renderCategories(){model.categories=await api('/categories');const input=node('input',{placeholder:'e.g. Dinner, Dessert, Slow cooker'});const color=node('input',{type:'color',value:'#537d56'});const list=node('div',{class:'grid'});for(const c of model.categories)list.append(card(node('div',{class:'row between'},node('h3',{text:c.name}),node('span',{class:'pill',text:c.color})),button('Delete',async()=>{if(!confirm('Delete category? Recipes will remain uncategorized.'))return;await api('/categories/'+c.id,{method:'DELETE'});navigate('categories')},'secondary')));content.replaceChildren(card(node('h2',{text:'Organize your recipes'}),node('div',{class:'toolbar'},node('label',{class:'grow'},'Category name',input),node('label',{},'Color',color),button('Add category',async()=>{await api('/categories',{method:'POST',data:{name:input.value,color:color.value}});announce('Category created');navigate('categories')},'primary'))),list)}
+
+async function renderCategories(){
+ [model.categories,model.folders]=await Promise.all([api('/categories'),api('/folders')]);
+ const manage=['admin','approver'].includes(model.user?.role);
+ const folderInput=node('input',{placeholder:'e.g. Jen’s Favorites or Holiday Baking'});
+ const folderGrid=node('div',{class:'grid'});
+ for(const folder of model.folders){
+  const entry=card(node('h3',{text:'📁 '+folder.name}),
+    node('p',{class:'muted small',text:folder.recipe_count+' recipes'}),
+    button('Show recipes',()=>{
+      model.recipeLibraryFilter={folder:String(folder.id),category:'',status:''};
+      navigate('recipes');
+    },'primary'));
+  if(manage)entry.append(
+    button('Rename',async()=>{
+      const name=prompt('Rename folder',folder.name);
+      if(name===null)return;
+      await api('/folders/'+folder.id,{method:'PUT',data:{name:name.trim()}});
+      announce('Folder renamed');renderCategories();
+    }),
+    button('Delete folder',async()=>{
+      if(!confirm('Delete "'+folder.name+'"? The recipes themselves will NOT be deleted.'))return;
+      await api('/folders/'+folder.id,{method:'DELETE'});
+      announce('Folder deleted. Your recipes are safe.');renderCategories();
+    })
+  );
+  folderGrid.append(entry);
+ }
+ const folderTools=card(node('h2',{text:'Folders'}),
+   node('p',{class:'muted',text:'Put a recipe in several folders without making copies. Everyone in your family can browse folders.'}));
+ if(manage)folderTools.append(node('div',{class:'toolbar'},
+    node('label',{class:'grow'},'Folder name',folderInput),
+    button('Create folder',async()=>{
+      const name=folderInput.value.trim();
+      if(!name){announce('Enter a folder name',true);return}
+      await api('/folders',{method:'POST',data:{name}});
+      announce('Folder created');renderCategories();
+    },'primary')));
+ const catInput=node('input',{placeholder:'e.g. Dinner, Dessert, Slow cooker'});
+ const color=node('input',{type:'color',value:'#537d56'});
+ const categoryGrid=node('div',{class:'grid'});
+ for(const c of model.categories){
+  const row=card(node('h3',{text:c.name}),
+    button('Show recipes',()=>{
+      model.recipeLibraryFilter={category:String(c.id),folder:'',status:''};
+      navigate('recipes');
+    },'primary'));
+  if(manage)row.append(button('Delete',async()=>{
+    if(!confirm('Delete category? Your recipes will remain.'))return;
+    await api('/categories/'+c.id,{method:'DELETE'});
+    renderCategories();
+  }));
+  categoryGrid.append(row);
+ }
+ const categoryTools=card(node('h2',{text:'Categories'}),
+   node('p',{class:'muted',text:'Organize by the type of food — Dinner, Dessert, Breakfast and more.'}));
+ if(manage)categoryTools.append(node('div',{class:'toolbar'},
+   node('label',{class:'grow'},'Category name',catInput),
+   node('label',{},'Color',color),
+   button('Add category',async()=>{
+     await api('/categories',{method:'POST',data:{name:catInput.value,color:color.value}});
+     announce('Category created');renderCategories();
+   },'primary')));
+ content.replaceChildren(folderTools,folderGrid,categoryTools,categoryGrid);
+}
+
 function isoDate(date){return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,10)}
 async function renderPlan(){const [entries,recipesList]=await Promise.all([api('/meal-plan'),api('/recipes')]);const start=new Date();start.setDate(start.getDate()-((start.getDay()+6)%7));const date=node('input',{type:'date',value:isoDate(start)});const select=node('select');recipesList.forEach(r=>select.add(node('option',{value:String(r.id),text:r.title})));const meal=node('select');['anytime','breakfast','lunch','dinner','snack'].forEach(v=>meal.add(node('option',{value:v,text:v[0].toUpperCase()+v.slice(1)})));const day=node('input',{type:'date',value:isoDate(new Date())});const servings=node('input',{type:'number',value:'1'});servings.min='0.1';servings.step='0.5';const create=card(node('h2',{text:'Plan to Make'}),node('div',{class:'toolbar'},node('label',{},'Day',day),node('label',{},'Meal',meal),node('label',{class:'grow'},'Recipe',select),node('label',{},'Portions',servings),button('Add to planner',async()=>{await api('/meal-plan',{method:'POST',data:{day:day.value,meal:meal.value,recipe_id:Number(select.value),servings:Number(servings.value)}});announce('Recipe added to your plan');renderPlan()},'primary')));const week=node('div',{class:'week-grid'});const range=node('span',{class:'small muted',text:'Select a Monday to see another week'});function draw(){week.replaceChildren();const monday=new Date(date.value+'T12:00:00');for(let n=0;n<7;n++){const d=new Date(monday);d.setDate(d.getDate()+n);const key=isoDate(d);const block=node('div',{class:'day-cell'+(key===isoDate(new Date())?' today':'')},node('strong',{text:d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}));for(const e of entries.filter(x=>x.day===key)){block.append(button((e.meal==='anytime'?'Plan to make':e.meal)+': '+e.recipe_title,async()=>{if(confirm('Remove this planned meal?')){await api('/meal-plan/'+e.id,{method:'DELETE'});await renderPlan()}},'meal-chip'))}week.append(block)}}date.addEventListener('change',draw);content.replaceChildren(create,node('div',{class:'row between',class:'plan-week-heading'},node('h2',{text:'Your upcoming recipes'}),date,range),week);draw()}
 async function renderShopping(){model.lists=await api('/shopping-lists');const listArea=node('div',{class:'grid'});for(const item of model.lists){const count=node('span',{class:'small muted',text:'Tap to open and check off items'});listArea.append(card(node('h3',{text:item.name}),count,button('Open list',()=>openShopping(item.id),'primary'),button('Delete list',async()=>{if(!confirm('Delete this shopping list?'))return;await api('/shopping-lists/'+item.id,{method:'DELETE'});renderShopping()})))}const name=node('input',{placeholder:'e.g. Saturday groceries'});content.replaceChildren(card(node('h2',{text:'Shopping lists'}),node('p',{class:'muted',text:'Select multiple recipes in Recipes to generate a shopping list automatically.'}),node('div',{class:'row'},node('div',{class:'grow'},name),button('+ New list',async()=>{if(!name.value.trim())return;const created=await api('/shopping-lists',{method:'POST',data:{name:name.value.trim()}});openShopping(created.id)},'primary'))),listArea)}
