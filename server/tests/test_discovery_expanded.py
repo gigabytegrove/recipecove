@@ -184,7 +184,7 @@ def test_recipe_critic_denied_html_is_reviewable_not_422(family,monkeypatch):
     async def blocked(url):
         raise ValueError("Recipe site denied automated access (HTTP 403)")
     async def empty_api(url,params):
-        assert url == 'https://therecipecritic.com/wp-json/wp/v2/posts'
+        assert url == 'https://www.therecipecritic.com/wp-json/wp/v2/posts'
         return []
     monkeypatch.setattr(recipes,'page_html',blocked)
     monkeypatch.setattr(catalog,'_get_json',empty_api)
