@@ -199,7 +199,9 @@ def test_catalog_name_ingredient_search_preview_and_approval(family):
               'strIngredient1':'chicken','strMeasure1':'2 cups','strIngredient2':'salt','strMeasure2':'1 tsp',
               'strMealThumb':'https://www.themealdb.com/images/media/meals/chicken.jpg','strCategory':'Chicken'}]}
         raise AssertionError('Unrecognized lookup '+url)
-    with patch.object(catalog,'_get_json',side_effect=mock_get):
+    with patch.object(catalog,'_get_json',side_effect=mock_get), \
+         patch.object(catalog.forknook_images,'capture_best_effort',\
+                      side_effect=lambda url:'/api/v2/images/'+'a'*64+'.jpg'):
         found=c.get('/api/v2/discovery/search?provider=themealdb&mode=name&q=chicken',headers=admin)
         assert found.status_code==200,found.text
         assert found.json()['items'][0]['id']=='52772'
@@ -209,7 +211,7 @@ def test_catalog_name_ingredient_search_preview_and_approval(family):
         draft=c.get('/api/v2/discovery/preview?provider=themealdb&id=52772',headers=roles['contributor'])
         assert draft.status_code==200,draft.text
         data=draft.json()
-        assert data['image_url'].startswith('https://www.themealdb.com/')
+        assert data['image_url']=='/api/v2/images/'+'a'*64+'.jpg'
         assert len(data['ingredients'])==2 and len(data['instructions'])==3
         assert c.get('/api/v2/recipes',headers=admin).json()==[]
         assert c.put('/api/v2/admin/family/settings',headers=admin,json={'require_approval':True}).status_code==200
