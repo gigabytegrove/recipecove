@@ -2,7 +2,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.4 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.5 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -96,7 +96,7 @@ X-RecipeCove-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.3.4 stable)
+## Native Kotlin Android client (2.3.5 stable)
 
 RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
 ```
 
-The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.4-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.4 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
+The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.5-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.4 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
 
 ## Tests and limitations
 
@@ -154,7 +154,7 @@ Combined discovery searches use public WordPress REST search APIs from Spend Wit
 
 ## Version alignment
 
-Web/PWA and server release **v2.3.4 stable** and Android **v2.3.4 stable** use matching product versions. The Android source versionCode is 11 so installed Android 2.3.4-alpha builds with versionCode 6 can be upgraded where the signing key matches. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
+Web/PWA and server release **v2.3.5 stable** and Android **v2.3.5 stable** use matching product versions. The native Android app uses versionCode **25**. Existing Android installations can be upgraded in place when the signing key matches; the legacy application ID remains unchanged to protect existing installs. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
 
 
 ### Android branding and safe-area layout (2.3.4)
@@ -171,7 +171,7 @@ Recipe discovery now offers a read-only preview before importing on web and Andr
 
 KitchenOwl re-imports can repair previously missing locally cached photos and restore sectioned Markdown ingredients and instructions when the source provides those fields. Existing edited family recipes are not bulk-overwritten. Migration remains read-only with respect to KitchenOwl. Image restoration is contingent on the source exposing an accessible image URL or authenticated image response; an image cannot be reconstructed when KitchenOwl no longer supplies it.
 
-The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.4-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.5-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
 
 
 ## Release 2.3.4 — web session persistence fix
@@ -234,3 +234,13 @@ Android uses the **exact approved RecipeCove wordmark and cookbook icon**, match
 ## 2.3.4 — Android polish and Discover preview repair
 
 The Android header now uses the approved transparent RecipeCove vector wordmark on a matching cream background, without the unnecessary Refresh button. More shows the installed app version automatically rather than a hard-coded old version or implementation details. Discover now opens results using each recipe's actual provider, resolving HTTP 422 errors when browsing results from All recipe sources. The existing package ID, storage and server API remain compatible.
+
+## 2.3.5 — Full Android recipe views and clearer updates
+
+**Android:** Discover results open a full, scrollable recipe page instead of an oversized dialog. The page shows the recipe photo (when the source provides one), name, servings and preparation time, ingredients, directions, and an explicit **Import and review recipe** action. Returning to Discover preserves search results, selected directory, and search text. The app uses authenticated RecipeCove requests for private images and a redirect-aware image loader for external public image CDNs, with a clear placeholder when a source does not supply a photo.
+
+**Server:** While previewing a directory recipe, RecipeCove makes a bounded, SSRF-protected best-effort copy of supported public images into the existing private image store, avoiding many third-party hotlinking failures. Recipe previews do not save or publish a recipe; normal contributor roles, approvals, and saving rules are preserved.
+
+**Web updater:** Administration → Updates checks for releases automatically, prominently shows the installed and newest versions, explains whether you are current or have an update available, shows release highlights, and uses a live five-stage progress view for download, verification, installation, restart, and completion. The progress display disappears when the operation finishes. Updates still run inside the existing RecipeCove container, without any Docker socket or third-party updater service. Releases that require new system dependencies or a Docker image are called out rather than pretending to install successfully.
+
+**Migration compatibility:** The existing database, API, local media, session state, persistent volumes, Android package ID, GitHub rename bridge, verified update bundles, and rollback behavior are unchanged.
