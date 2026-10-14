@@ -80,6 +80,20 @@ jobs:
           sha256sum "dist/recipecove-server-${VERSION}.tar.gz" | awk '{print $1}' \
             > "dist/recipecove-server-${VERSION}.sha256"
           cp "dist/recipecove-server-${VERSION}.sha256" "dist/forknook-server-${VERSION}.sha256"
+          # Publish actionable, human-readable release notes from the same
+          # metadata served to the in-app updater.
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          details = json.loads(Path("server/update_release.json").read_text())
+          version = details["version"]
+          highlights = [x for x in details.get("release_notes", []) if isinstance(x, str) and x.strip()]
+          lines = [f"# RecipeCove v{version}", "", "## What's new", ""]
+          lines += ["- " + item.strip() for item in highlights] or ["- Maintenance and reliability improvements."]
+          lines += ["", "Compatible releases install from Administration → Updates in RecipeCove.",
+                    "Base-image, dependency, or operating-system changes require a separate image update."]
+          Path("dist/release-notes.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
       - name: Publish a stable GitHub Release
         env:
           GH_TOKEN: ${{ secrets.FORKNOOK_RELEASE_TOKEN || github.token }}
@@ -95,4 +109,4 @@ jobs:
             "dist/forknook-server-${VERSION}.tar.gz" \
             "dist/forknook-server-${VERSION}.sha256" \
             --target "$GITHUB_SHA" --title "RecipeCove $TAG" \
-            --notes "Server code and UI update. Python dependencies, launcher and Docker image changes still require a container redeploy."
+            --notes-file "dist/release-notes.md"
