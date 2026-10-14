@@ -15,9 +15,11 @@ from urllib.parse import quote, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette.concurrency import run_in_threadpool
 
 import forknook as base
 import forknook_dataset as dataset
+import forknook_images
 
 router = APIRouter(prefix='/api/v2/discovery', tags=['Recipe discovery'])
 MEALDB = 'https://www.themealdb.com/api/json/v1'
@@ -257,11 +259,28 @@ def _wikibooks_recipe(title,html):
     return item.model_dump()
 
 
+async def _prepare_preview_photo(recipe: dict) -> dict:
+    """Provide a session-protected photo for Android and web recipe previews.
+
+    Source photographs may redirect or refuse hotlinking from a phone.
+    Reuse the same public-IP-pinned, size-limited image capture already used
+    when saving a recipe. This caches an image, not a recipe or approval.
+    If a publisher blocks capture, retain its original URL for client fallback.
+    """
+    url=str(recipe.get('image_url') or '')
+    if not url.startswith(('https://','http://')):
+        return recipe
+    local=await run_in_threadpool(forknook_images.capture_best_effort,url)
+    if local!=url and forknook_images.LOCAL_IMAGE.fullmatch(local):
+        return {**recipe,'image_url':local}
+    return recipe
+
+
 @router.get('/preview')
 async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_length=1,max_length=220),
                   who:dict=Depends(base.principal)):
     if provider=='foodcom':
-        return dataset.preview(id)
+        return await _prepare_preview_photo(dataset.preview(id))
     if provider in WP_SITES:
         if not _allowed_publisher_url(provider,id):
             raise HTTPException(422,'Invalid recipe publisher URL')
@@ -270,7 +289,7 @@ async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_len
             source_html,source_url=await recipes.page_html(id)
             parsed=recipes.parse_document(source_html,source_url)
             item=base.RecipePayload.model_validate(base.from_parsed(parsed))
-            return item.model_dump()
+            return await _prepare_preview_photo(item.model_dump())
         except (ValueError,TypeError) as exc:
             raise HTTPException(422,'Publisher page could not be converted to a recipe; use Import from URL') from exc
     if provider=='themealdb':
@@ -278,7 +297,7 @@ async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_len
         info=await _get_json(f'{MEALDB}/{_meal_key()}/lookup.php',{'i':id})
         meals=info.get('meals') or []
         if not isinstance(meals,list) or not meals:raise HTTPException(404,'Recipe no longer available')
-        return _meal_recipe(meals[0])
+        return await _prepare_preview_photo(_meal_recipe(meals[0]))
     if provider=='wikibooks':
         if not id.startswith('Cookbook:') or re.search(r'[\[\]{}|#?\x00-\x1f]',id):
             raise HTTPException(422,'Invalid Cookbook title')
@@ -287,5 +306,5 @@ async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_len
         payload=info.get('parse',{}).get('text',{})
         if not isinstance(payload,dict) or not isinstance(payload.get('*'),str):
             raise HTTPException(404,'Cookbook page is unavailable')
-        return _wikibooks_recipe(id,payload['*'])
+        return await _prepare_preview_photo(_wikibooks_recipe(id,payload['*']))
     raise HTTPException(422,'Unsupported recipe directory')
