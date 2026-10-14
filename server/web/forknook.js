@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const content=$('content');
-const model={token:localStorage.getItem('forknook-token')||sessionStorage.getItem('forknook-token')||'',user:null,page:'home',recipes:[],categories:[],lists:[],selected:new Set(),editing:null};
+const model={token:localStorage.getItem('forknook-token')||sessionStorage.getItem('forknook-token')||'',user:null,page:'home',recipes:[],categories:[],folders:[],recipeLibraryFilter:{category:'',folder:'',status:''},lists:[],selected:new Set(),editing:null};
 const node=(tag,props={},...children)=>{let e=document.createElement(tag);for(let [k,v] of Object.entries(props)){if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k==='value')e.value=v;else if(k==='type')e.type=v;else if(k==='onClick')e.addEventListener('click',v);else if(k==='onChange')e.addEventListener('change',v);else if(k==='hidden')e.hidden=!!v;else e.setAttribute(k,v)}for(let child of children.flat()){if(child!==null&&child!==undefined)e.append(child instanceof Node?child:document.createTextNode(String(child)))}return e};
 function approveUnsecuredConnection(){
  if(location.protocol!=='http:')return true;
@@ -86,7 +86,7 @@ const field=(name,placeholder,value='',type='text')=>node('label',{},name,node('
 const button=(text,onclick,kind='secondary')=>node('button',{class:kind,text,onClick:async()=>{try{await onclick()}catch(e){announce(e.message,true)}}});
 function empty(message){return node('div',{class:'empty',text:message})}
 function card(...children){return node('article',{class:'card'},...children)}
-async function reloadLibrary(){[model.recipes,model.categories]=await Promise.all([api('/recipes'),api('/categories')])}
+async function reloadLibrary(){[model.recipes,model.categories,model.folders]=await Promise.all([api('/recipes'),api('/categories'),api('/folders')])}
 const recipePhotoCache=new Map();
 async function setPicture(container,imageUrl,description){
  if(!imageUrl)return;
@@ -107,13 +107,73 @@ async function setPicture(container,imageUrl,description){
  }catch(e){/* A missing image never hides the recipe. */}
 }
 function recipeStatus(recipe){return recipe.state==='made'?'Made before':recipe.state==='want'?'Want to make':'Not marked'}
-async function renderRecipes(){await reloadLibrary();model.selected=new Set();const search=node('input',{placeholder:'Search names, descriptions, tags…',type:'search'}),filter=node('select');[['','All recipes'],['want','Want to make'],['made','Made before']].forEach(([value,title])=>filter.add(node('option',{value,text:title})));const category=node('select');category.add(node('option',{value:'',text:'All categories'}));model.categories.forEach(c=>category.add(node('option',{value:String(c.id),text:c.name})));const grid=node('div',{class:'grid'});const selectedInfo=node('span',{class:'muted small',text:'Select recipes to make a shopping list'});
-function draw(){const q=search.value.toLowerCase(),state=filter.value,cid=category.value;grid.replaceChildren();const found=model.recipes.filter(r=>(!state||r.state===state)&&(!cid||String(r.category_id)===cid)&&(!q||(r.title+' '+(r.description||'')+' '+(r.tags||[]).join(' ')).toLowerCase().includes(q)));if(!found.length)grid.append(empty('No recipes match these filters. Import or create one to get started.'));for(const r of found){const ch=node('input',{type:'checkbox'});ch.checked=model.selected.has(r.id);ch.addEventListener('change',()=>{if(ch.checked)model.selected.add(r.id);else model.selected.delete(r.id);selectedInfo.textContent=model.selected.size+' recipe(s) selected'});const tile=card(node('div',{class:'recipe-tile-head'},node('span',{class:'pill',text:r.category||'Uncategorized'}),node('label',{class:'recipe-select'},ch,'Select')),node('div',{class:'recipe-tile-copy'},node('h3',{text:r.title}),node('p',{class:'recipe-excerpt',text:(r.description||'Open to view ingredients and directions.').slice(0,145).replace(/\s+\S*$/,'').trim() + ((r.description||'').length>145?'…':'')}),node('span',{class:'small muted',text:recipeStatus(r)})),node('footer',{},button('View recipe',()=>viewRecipe(r.id),'primary'),button('Want to make',()=>mark(r.id,'want')),button('Made before',()=>mark(r.id,'made'))));tile.classList.add('recipe-tile');const picture=node('div',{class:'recipe-tile-photo'},node('span',{class:'recipe-placeholder',text:'🍽️'}));tile.insertBefore(picture,tile.firstChild);if(r.image_url)setPicture(picture,r.image_url,r.title);grid.append(tile)}}
-async function mark(id,state){await api('/recipes/'+id+'/state',{method:'PUT',data:{state}});announce('Recipe status updated');await renderRecipes()}
-search.addEventListener('input',draw);filter.addEventListener('change',draw);category.addEventListener('change',draw);
-const toolbar=node('div',{class:'toolbar'},node('label',{},'Find a recipe',search),node('label',{},'Status',filter),node('label',{},'Category',category),button('+ New recipe',()=>openEditor(null),'primary'),button('Import recipe',()=>navigate('sources')),button('My submissions',()=>navigate('review')));
-const actions=node('div',{class:'toolbar'},button('Build shopping list from selected',async()=>{const ids=[...model.selected];if(!ids.length){announce('Select one or more recipes first',true);return}const name=prompt('Name this shopping list','Recipes shopping list');if(!name)return;await api('/shopping-lists/build',{method:'POST',data:{recipe_ids:ids,name}});announce('Shopping list created');await navigate('shopping')},'accent'),selectedInfo);
-content.replaceChildren(toolbar,actions,grid);draw()}
+
+async function renderRecipes(){
+ await reloadLibrary();model.selected=new Set();
+ const saved=model.recipeLibraryFilter;
+ const search=node('input',{placeholder:'Search recipes…',type:'search'});
+ const status=node('select');
+ [['','All recipes'],['want','Want to make'],['made','Made before']].forEach(([value,title])=>status.add(node('option',{value,text:title})));
+ status.value=saved.status||'';
+ const category=node('select');
+ category.add(node('option',{value:'',text:'All categories'}));
+ model.categories.forEach(c=>category.add(node('option',{value:String(c.id),text:c.name})));
+ category.value=saved.category||'';
+ const folder=node('select');
+ folder.add(node('option',{value:'',text:'All folders'}));
+ folder.add(node('option',{value:'none',text:'Not in a folder'}));
+ model.folders.forEach(f=>folder.add(node('option',{value:String(f.id),text:f.name+' ('+f.recipe_count+')'})));
+ folder.value=saved.folder||'';
+ const grid=node('div',{class:'grid'}),count=node('p',{class:'muted small',role:'status'});
+ const selectedInfo=node('span',{class:'muted small',text:'Choose recipes for a shopping list'});
+ function draw(){
+  const q=search.value.toLowerCase(),st=status.value,cid=category.value,fid=folder.value;
+  Object.assign(saved,{category:cid,folder:fid,status:st});
+  grid.replaceChildren();
+  const found=model.recipes.filter(r=>(!st||r.state===st)&&(!cid||String(r.category_id)===cid)&&
+   (!fid||(fid==='none'?!((r.folder_ids||[]).length):(r.folder_ids||[]).includes(Number(fid))))&&
+   (!q||(r.title+' '+(r.description||'')+' '+(r.tags||[]).join(' ')).toLowerCase().includes(q)));
+  count.textContent=found.length+' of '+model.recipes.length+' recipes';
+  if(!found.length)grid.append(empty('No recipes match. Try a different folder, category or search.'));
+  for(const r of found){
+   const cb=node('input',{type:'checkbox'});
+   cb.checked=model.selected.has(r.id);
+   cb.addEventListener('change',()=>{
+     if(cb.checked)model.selected.add(r.id);else model.selected.delete(r.id);
+     selectedInfo.textContent=model.selected.size+' recipe(s) selected';
+   });
+   const names=(r.folder_ids||[]).map(id=>model.folders.find(f=>f.id===id)?.name).filter(Boolean);
+   const tile=card(
+    node('div',{class:'recipe-tile-head'},node('span',{class:'pill',text:r.category||'Uncategorized'}),node('label',{class:'recipe-select'},cb,'Select')),
+    ...(names.length?[node('div',{class:'folder-tags'},...names.map(n=>node('span',{class:'folder-chip',text:'📁 '+n})))]:[]),
+    node('div',{class:'recipe-tile-copy'},node('h3',{text:r.title}),
+      node('p',{class:'recipe-excerpt',text:(r.description||'Open to see ingredients and directions.').slice(0,145)}),
+      node('span',{class:'small muted',text:recipeStatus(r)})),
+    node('footer',{},button('View recipe',()=>viewRecipe(r.id),'primary'),button('Want to make',()=>mark(r.id,'want')),button('Made before',()=>mark(r.id,'made'))));
+   tile.classList.add('recipe-tile');
+   const picture=node('div',{class:'recipe-tile-photo'},node('span',{class:'recipe-placeholder',text:'🍽️'}));
+   tile.insertBefore(picture,tile.firstChild);
+   if(r.image_url)setPicture(picture,r.image_url,r.title);
+   grid.append(tile);
+  }
+ }
+ async function mark(id,state){await api('/recipes/'+id+'/state',{method:'PUT',data:{state}});announce('Recipe status updated');await renderRecipes()}
+ [search,status,category,folder].forEach(element=>element.addEventListener(element===search?'input':'change',draw));
+ const toolbar=node('div',{class:'toolbar'},
+   node('label',{},'Find a recipe',search),node('label',{},'Folder',folder),
+   node('label',{},'Category',category),node('label',{},'Status',status));
+ const actions=node('div',{class:'toolbar'},
+   button('+ New recipe',()=>openEditor(null),'primary'),button('Import recipe',()=>navigate('sources')),
+   button('Manage folders & categories',()=>navigate('categories')),
+   button('Build shopping list from selected',async()=>{
+     const ids=[...model.selected];if(!ids.length){announce('Select recipes first',true);return}
+     const name=prompt('Name this shopping list','Recipes shopping list');if(!name)return;
+     await api('/shopping-lists/build',{method:'POST',data:{recipe_ids:ids,name}});
+     announce('Shopping list created');await navigate('shopping');
+   },'accent'),selectedInfo);
+ content.replaceChildren(toolbar,actions,count,grid);draw();
+}
+
 async function viewRecipe(id,{push=true}={}){
  if(push&&location.pathname!==urlFor('recipes',id))history.pushState({},'',urlFor('recipes',id));
  model.page='recipes';
