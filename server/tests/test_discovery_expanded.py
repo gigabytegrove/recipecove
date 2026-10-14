@@ -150,3 +150,29 @@ def test_invalid_foodcom_dataset_does_not_overwrite_existing_index(family,tmp_pa
         dataset._index_csv(io.BytesIO(b'name,bad-column\nfoo,bar\n'),dataset._path())
     assert dataset.stats()['count']==count
     assert dataset.search('sesame chicken')[0]['title']=='Sesame Chicken'
+
+def test_preview_photo_cache_falls_back_gracefully_when_source_refuses(monkeypatch):
+    import asyncio
+    import forknook_catalog as catalog
+    source = 'https://www.themealdb.com/images/recipe.jpg'
+    requests = []
+    def refuse(url):
+        requests.append(url)
+        return url
+    monkeypatch.setattr(catalog.forknook_images, 'capture_best_effort', refuse)
+    result = asyncio.run(catalog._prepare_preview_photo({'image_url': source, 'title': 'Soup'}))
+    assert result['image_url'] == source
+    assert requests == [source]
+    missing = asyncio.run(catalog._prepare_preview_photo({'image_url': '', 'title': 'No photo'}))
+    assert missing['image_url'] == ''
+    assert requests == [source]
+
+
+def test_preview_photo_cache_returns_private_photo_when_captured(monkeypatch):
+    import asyncio
+    import forknook_catalog as catalog
+    image = '/api/v2/images/' + 'a'*64 + '.jpg'
+    monkeypatch.setattr(catalog.forknook_images, 'capture_best_effort', lambda _: image)
+    result = asyncio.run(catalog._prepare_preview_photo(
+        {'image_url': 'https://www.themealdb.com/images/recipe.jpg'}))
+    assert result['image_url'] == image
