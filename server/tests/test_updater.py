@@ -60,7 +60,7 @@ def patches(tmp_path,monkeypatch):
     release,blob=make_release(server)
     def read(url,maxsize=None):
         if url==updater.API: return json.dumps(release).encode()
-        if url.endswith('/server/update_release.json'): return json.dumps({'version':'2.1.0','requires_image':False}).encode()
+        if url.endswith('/server/update_release.json'): return json.dumps({'version':'2.1.0','requires_image':False,'release_notes':['Improved recipe discovery','Clearer update progress']}).encode()
         if url.endswith('.sha256'):return hashlib.sha256(blob).hexdigest().encode()
         if url.endswith('.tar.gz'):return blob
         raise RuntimeError('Unrecognized download URL')
@@ -73,6 +73,7 @@ def test_check_release(patches):
     assert found['available'] and found['latest_version']=='2.1.0'
     assert found['current_version']=='2.0.1'
     assert 'bundle' not in found
+    assert found['release_notes']==['Improved recipe discovery','Clearer update progress']
 
 
 def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
