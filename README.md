@@ -2,7 +2,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.5 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.6 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -96,7 +96,7 @@ X-RecipeCove-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.3.5 stable)
+## Native Kotlin Android client (2.3.6 stable)
 
 RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
@@ -244,3 +244,12 @@ The Android header now uses the approved transparent RecipeCove vector wordmark 
 **Web updater:** Administration → Updates checks for releases automatically, prominently shows the installed and newest versions, explains whether you are current or have an update available, shows release highlights, and uses a live five-stage progress view for download, verification, installation, restart, and completion. The progress display disappears when the operation finishes. Updates still run inside the existing RecipeCove container, without any Docker socket or third-party updater service. Releases that require new system dependencies or a Docker image are called out rather than pretending to install successfully.
 
 **Migration compatibility:** The existing database, API, local media, session state, persistent volumes, Android package ID, GitHub rename bridge, verified update bundles, and rollback behavior are unchanged.
+
+
+## 2.3.6 — Android Discover navigation and Recipe Critic resilience
+
+**Android:** Discover remembers the exact scroll location after viewing a recipe and returning to results. Search submissions intentionally reset the list to the beginning. Recipe cards show loading feedback while authenticated photographs download, instead of falsely saying no photo exists; successfully loaded preview photographs become available to the corresponding result card. The logo has a transparent safety margin and a responsive header footprint, so the full RecipeCove wordmark remains visible without cropping or a white background.
+
+**Publisher recipes:** WordPress-based discovery sources, including The Recipe Critic, attempt one batched featured-media metadata request for search-result thumbnails. Publisher preview failures now try the public WordPress post content when available. When an article is inaccessible or lacks usable ingredient/direction markup, RecipeCove preserves its original URL and offers an explicitly incomplete draft for manual review instead of misleading users with an unhelpful HTTP 422. Invalid or non-whitelisted URLs still return HTTP 422. Manual approval and recipe saving remain unchanged.
+
+**Compatibility:** This release preserves the 2.3.5 design baseline, existing database and photos, self-hosted updater, Android package identifier, API contract, and deployment environment. No external update service is introduced.
