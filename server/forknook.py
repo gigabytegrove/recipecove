@@ -73,6 +73,9 @@ def initialize():
           expires REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS categories (
           id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, color TEXT NOT NULL DEFAULT '#537d56');
+        CREATE TABLE IF NOT EXISTS recipe_folders (
+          id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS recipes (
           id INTEGER PRIMARY KEY, title TEXT NOT NULL, data TEXT NOT NULL,
           category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
@@ -214,9 +217,13 @@ class RecipePayload(BaseModel):
     image_url: str = Field(default="",max_length=2000)
     tags: list[str] = Field(default_factory=list,max_length=50)
     category_id: int | None = None
+    folder_ids: list[int] = Field(default_factory=list,max_length=50)
     evidence: str = Field(default="",max_length=47000)
     requires_manual_review: bool = False
     published: bool = False  # Explicit opt-in for read-only, API-key-protected external publication.
+
+class FolderPayload(BaseModel):
+    name: str = Field(min_length=1,max_length=80)
 
 class CategoryPayload(BaseModel):
     name: str = Field(min_length=1,max_length=80)
@@ -371,6 +378,82 @@ def create_category(body:CategoryPayload,who:dict=Depends(principal)):
             return {"id":r.lastrowid}
         except sqlite3.IntegrityError as exc:raise HTTPException(409,"Category already exists") from exc
 
+@router.get('/folders')
+def folders(who:dict=Depends(principal)):
+    """Shared folders are visible to all family members."""
+    with database() as db:
+        rows=db.execute('SELECT id,name FROM recipe_folders ORDER BY name COLLATE NOCASE').fetchall()
+        counts={}
+        for item in db.execute('SELECT data FROM recipes'):
+            for folder_id in set(json.loads(item['data']).get('folder_ids') or []):
+                counts[folder_id]=counts.get(folder_id,0)+1
+        return [{**dict(row),'recipe_count':counts.get(row['id'],0)} for row in rows]
+
+
+@router.post('/folders',status_code=201)
+def create_folder(body:FolderPayload,who:dict=Depends(principal)):
+    import forknook_features
+    if not forknook_features.can_approve(who):
+        raise HTTPException(403,'Folder management requires approver permission')
+    name=body.name.strip()
+    if not name:raise HTTPException(422,'Enter a folder name')
+    with LOCK,database() as db:
+        try:
+            result=db.execute('INSERT INTO recipe_folders(name,created_at) VALUES (?,?)',(name,time.time()))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409,'This folder already exists') from exc
+        return {'id':result.lastrowid,'name':name}
+
+
+@router.put('/folders/{folder_id}')
+def rename_folder(folder_id:int,body:FolderPayload,who:dict=Depends(principal)):
+    import forknook_features
+    if not forknook_features.can_approve(who):
+        raise HTTPException(403,'Folder management requires approver permission')
+    name=body.name.strip()
+    if not name:raise HTTPException(422,'Enter a folder name')
+    with LOCK,database() as db:
+        try:
+            result=db.execute('UPDATE recipe_folders SET name=? WHERE id=?',(name,folder_id))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409,'This folder already exists') from exc
+        if not result.rowcount:raise HTTPException(404,'Folder not found')
+        return {'id':folder_id,'name':name}
+
+
+@router.delete('/folders/{folder_id}')
+def delete_folder(folder_id:int,who:dict=Depends(principal)):
+    import forknook_features
+    if not forknook_features.can_approve(who):
+        raise HTTPException(403,'Folder management requires approver permission')
+    with LOCK,database() as db:
+        if not db.execute('SELECT 1 FROM recipe_folders WHERE id=?',(folder_id,)).fetchone():
+            raise HTTPException(404,'Folder not found')
+        # Only delete the organizational association, never the recipe itself.
+        for row in db.execute('SELECT id,data FROM recipes').fetchall():
+            data=json.loads(row['data'])
+            old=data.get('folder_ids') or []
+            if folder_id in old:
+                data['folder_ids']=[x for x in old if x!=folder_id]
+                db.execute('UPDATE recipes SET data=? WHERE id=?',(json.dumps(data),row['id']))
+        db.execute('DELETE FROM recipe_folders WHERE id=?',(folder_id,))
+        return {'success':True,'recipes_preserved':True}
+
+
+def _folders_exist(db,folder_ids:list[int]) -> None:
+    if len(folder_ids)!=len(set(folder_ids)) or any(
+        type(folder_id) is not int or folder_id<1 for folder_id in folder_ids
+    ):
+        raise HTTPException(422,'Choose each valid folder only once')
+    if folder_ids:
+        placeholders=','.join('?' for _ in folder_ids)
+        existing=db.execute(
+            'SELECT COUNT(*) FROM recipe_folders WHERE id IN ('+placeholders+')',tuple(folder_ids)
+        ).fetchone()[0]
+        if existing!=len(folder_ids):
+            raise HTTPException(422,'A selected folder no longer exists')
+
+
 @router.delete("/categories/{category_id}")
 def delete_category(category_id:int,who:dict=Depends(admin)):
     with LOCK,database() as db:
@@ -414,7 +497,7 @@ def read_recipe_image(filename:str,who:dict=Depends(principal)):
 
 
 @router.get("/recipes")
-def list_recipes(q:str="",category_id:int|None=None,state:str="",who:dict=Depends(principal)):
+def list_recipes(q:str="",category_id:int|None=None,folder_id:int|None=None,state:str="",who:dict=Depends(principal)):
     with database() as db:
         rows=db.execute("""SELECT r.*,coalesce(s.state,'none') AS personal_state,s.made_count, c.name AS category
            FROM recipes r LEFT JOIN recipe_states s ON s.recipe_id=r.id AND s.user_id=?
@@ -423,7 +506,9 @@ def list_recipes(q:str="",category_id:int|None=None,state:str="",who:dict=Depend
     for r in rows:
         if category_id is not None and r["category_id"]!=category_id:continue
         if state and r["personal_state"]!=state:continue
-        item=_recipe(r);item.update({"state":r["personal_state"],"made_count":r["made_count"] or 0,"category":r["category"]})
+        item=_recipe(r)
+        if folder_id is not None and folder_id not in (item.get('folder_ids') or []):continue
+        item.update({"state":r["personal_state"],"made_count":r["made_count"] or 0,"category":r["category"]})
         if q and q.casefold() not in (item["title"]+" "+item.get("description","")+" "+" ".join(item.get("tags",[]))).casefold():continue
         result.append(item)
     return result
@@ -442,6 +527,7 @@ def create_recipe(body:RecipePayload,who:dict=Depends(principal)):
     body=body.model_copy(update={"image_url":forknook_images.capture_best_effort(body.image_url)})
     with LOCK,database() as db:
         _category_exists(db,body.category_id)
+        _folders_exist(db,body.folder_ids)
         if body.published and not features.can_approve(who):
             body=body.model_copy(update={'published':False})
         if features.approval_required(db,who):
@@ -459,7 +545,7 @@ def update_recipe(recipe_id:int,body:RecipePayload,who:dict=Depends(principal)):
     if not features.can_approve(who):raise HTTPException(403,'Only family approvers can edit approved recipes; suggest a new version instead')
     body=body.model_copy(update={"image_url":forknook_images.capture_best_effort(body.image_url)})
     with LOCK,database() as db:
-        _recipe_exists(db,recipe_id);_category_exists(db,body.category_id)
+        _recipe_exists(db,recipe_id);_category_exists(db,body.category_id);_folders_exist(db,body.folder_ids)
         if not features.can_approve(who):
             raise HTTPException(403,'Only family approvers can edit approved recipes; suggest a new version instead')
         db.execute("UPDATE recipes SET title=?,data=?,category_id=?,updated_at=? WHERE id=?",
