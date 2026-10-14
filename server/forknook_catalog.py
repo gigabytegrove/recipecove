@@ -396,6 +396,10 @@ async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_len
             draft['source_url']=id
             if draft.get('ingredients') and draft.get('instructions'):
                 return await _prepare_preview_photo(draft)
+            if draft.get('ingredients') or draft.get('instructions'):
+                draft['requires_manual_review']=True
+                draft['preview_notice']='This publisher did not provide complete recipe details automatically. Check the original ingredients and directions before you save.'
+                return await _prepare_preview_photo(draft)
         except (ValueError,TypeError):
             pass  # Publishers can deny automated HTML access or omit recipe cards.
         # A publisher post API can still contain the recipe when the HTML does not.
