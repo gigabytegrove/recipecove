@@ -345,6 +345,9 @@ async function renderUpdaterPanel(){
  const explanation=node('p',{class:'muted updater-description',text:'Looking for the latest compatible RecipeCove release.'});
  const warning=node('p',{class:'warning',role:'alert',hidden:true});
  const releaseLink=node('a',{class:'updater-release-link',target:'_blank',rel:'noopener noreferrer',text:'Read release details ↗',hidden:true});
+ const notesList=node('ul',{class:'updater-notes-list'});
+ const notesBox=node('section',{class:'updater-notes',hidden:true},
+   node('h3',{text:"What's new in this release"}),notesList);
  const progress=node('progress',{value:'0',max:'100',class:'update-progress update-progress-large'});
  const percent=node('strong',{class:'updater-percent',text:'0%'});
  const task=node('p',{class:'muted small',role:'status',text:''});
@@ -373,7 +376,7 @@ async function renderUpdaterPanel(){
      node('section',{class:'updater-version-tile'},node('span',{class:'updater-version-caption',text:'Installed on this server'}),installedVersion),
      node('section',{class:'updater-version-tile'},node('span',{class:'updater-version-caption',text:'Latest published release'}),newestVersion)),
    node('section',{class:'updater-summary'},headline,explanation,releaseLink),
-   progressSection,warning,
+   notesBox,progressSection,warning,
    node('div',{class:'updater-actions'},installBtn,checkBtn,rollbackBtn));
  const detail=card(node('h3',{text:'How updates work'}),
    node('p',{class:'muted',text:'RecipeCove verifies the update, installs it on your existing server, and restarts automatically. Your recipes, members, photos, and settings remain in persistent storage. If the new version fails its health check, RecipeCove restores the previous version.'}),
@@ -403,6 +406,9 @@ async function renderUpdaterPanel(){
  const setAvailability=(data)=>{
    latestCheck=data;available=data;
    newestVersion.textContent=data.latest_version?'v'+data.latest_version:'Unavailable';
+   const releaseNotes=Array.isArray(data.release_notes)?data.release_notes.filter(x=>typeof x==='string'&&x.trim()):[];
+   notesList.replaceChildren(...releaseNotes.map(text=>node('li',{text})));
+   notesBox.hidden=!data.available||releaseNotes.length===0;
    releaseLink.hidden=true;
    if(data.release_url){
      try{
