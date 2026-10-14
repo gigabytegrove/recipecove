@@ -153,6 +153,11 @@ def check() -> dict:
             5000))
         if manifest.get('version') != release['version']:
             raise ValueError('Release metadata version mismatch')
+        notes = manifest.get('release_notes', [])
+        result['release_notes'] = [
+            entry.strip()[:250] for entry in notes[:8]
+            if isinstance(entry, str) and entry.strip()
+        ] if isinstance(notes, list) else []
         result['requires_image'] = bool(manifest.get('requires_image'))
         result['available'] = (
             not result['requires_image'] and
