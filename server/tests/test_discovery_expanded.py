@@ -176,3 +176,48 @@ def test_preview_photo_cache_returns_private_photo_when_captured(monkeypatch):
     result = asyncio.run(catalog._prepare_preview_photo(
         {'image_url': 'https://www.themealdb.com/images/recipe.jpg'}))
     assert result['image_url'] == image
+
+
+def test_recipe_critic_denied_html_is_reviewable_not_422(family,monkeypatch):
+    client,admin=family
+    import recipes
+    async def blocked(url):
+        raise ValueError("Recipe site denied automated access (HTTP 403)")
+    async def empty_api(url,params):
+        assert url == 'https://therecipecritic.com/wp-json/wp/v2/posts'
+        return []
+    monkeypatch.setattr(recipes,'page_html',blocked)
+    monkeypatch.setattr(catalog,'_get_json',empty_api)
+    source='https://therecipecritic.com/creamy-lemon-chicken/'
+    answer=client.get('/api/v2/discovery/preview',headers=admin,
+                      params={'provider':'therecipecritic','id':source})
+    assert answer.status_code==200,answer.text
+    draft=answer.json()
+    assert draft['title']=='Creamy Lemon Chicken'
+    assert draft['source_url']==source
+    assert draft['requires_manual_review'] is True
+    assert draft['ingredients']==[] and draft['instructions']==[]
+    assert 'original recipe' in draft['preview_notice'].lower()
+    assert client.get('/api/v2/recipes',headers=admin).json()==[]
+
+
+def test_wordpress_featured_thumbnails_from_one_batch_call(family,monkeypatch):
+    client,admin=family
+    seen=[]
+    source='https://therecipecritic.com/creamy-lemon-chicken/'
+    async def fake(url,params):
+        seen.append((url,params))
+        if url.endswith('/wp/v2/search'):
+            return [{'id':9123,'title':'Creamy Lemon Chicken','url':source}]
+        assert url.endswith('/wp/v2/posts')
+        assert params['include']=='9123'
+        return [{'id':9123,'_embedded':{'wp:featuredmedia':[{
+           'source_url':'https://therecipecritic.com/images/photo.jpg',
+           'media_details':{'sizes':{'medium':{
+             'source_url':'https://therecipecritic.com/images/thumb.jpg'}}}}]}}]
+    monkeypatch.setattr(catalog,'_get_json',fake)
+    response=client.get('/api/v2/discovery/search',headers=admin,
+        params={'provider':'therecipecritic','mode':'name','q':'lemon chicken'})
+    assert response.status_code==200,response.text
+    assert response.json()['items'][0]['image_url']=='https://therecipecritic.com/images/thumb.jpg'
+    assert len(seen)==2
