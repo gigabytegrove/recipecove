@@ -150,6 +150,7 @@ def approve(submission_id:int,body:Decision,who:dict=Depends(base.principal)):
         if s['status']!='pending':raise HTTPException(409,'Submission has already been reviewed')
         model=base.RecipePayload.model_validate_json(s['data'])
         base._category_exists(db,model.category_id)
+        base._folders_exist(db,model.folder_ids)
         now=time.time()
         recipe=db.execute('''INSERT INTO recipes(title,data,category_id,created_by,created_at,updated_at)
            VALUES (?,?,?,?,?,?)''',(model.title.strip(),model.model_dump_json(),model.category_id,s['submitted_by'],now,now))
