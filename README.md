@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="server/web/recipecove-logo.webp" alt="RecipeCove — your family recipes in one place" width="520">
+</p>
+
 # RecipeCove · family recipe manager
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
