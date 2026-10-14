@@ -50,6 +50,11 @@
   <div class="form-grid"><label class="full">Recipe name<input name="title" required maxlength="300"></label>
     <label class="full">Description<textarea name="description" rows="2"></textarea></label>
     <label>Category<select name="category_id"><option value="">Uncategorized</option></select></label>
+    <fieldset class="full recipe-folders-editor">
+      <legend>Folders (optional — choose any)</legend>
+      <p class="small muted">Recipes can appear in several folders without making copies.</p>
+      <div id="recipe-folder-choices" class="recipe-folder-choices"></div>
+    </fieldset>
     <label>Servings<input name="servings" placeholder="4 servings"></label>
     <label>Prep (minutes)<input name="prep_time" type="number" min="0"></label>
     <label>Cook (minutes)<input name="cook_time" type="number" min="0"></label>
