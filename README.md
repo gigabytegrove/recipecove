@@ -2,7 +2,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.6 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.7 · stable.** GitHub: https://github.com/gigabytegrove/forknook
 
 ## Features
 
@@ -96,7 +96,7 @@ X-RecipeCove-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.3.6 stable)
+## Native Kotlin Android client (2.3.7 stable)
 
 RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
@@ -253,3 +253,14 @@ The Android header now uses the approved transparent RecipeCove vector wordmark 
 **Publisher recipes:** WordPress-based discovery sources, including The Recipe Critic, attempt one batched featured-media metadata request for search-result thumbnails. Publisher preview failures now try the public WordPress post content when available. When an article is inaccessible or lacks usable ingredient/direction markup, RecipeCove preserves its original URL and offers an explicitly incomplete draft for manual review instead of misleading users with an unhelpful HTTP 422. Invalid or non-whitelisted URLs still return HTTP 422. Manual approval and recipe saving remain unchanged.
 
 **Compatibility:** This release preserves the 2.3.5 design baseline, existing database and photos, self-hosted updater, Android package identifier, API contract, and deployment environment. No external update service is introduced.
+
+
+## 2.3.7 — Organize recipes with shared folders and categories
+
+RecipeCove now has **shared recipe folders** alongside existing categories. A folder is a named group such as “Jen’s Favorites” or “Holiday Baking”; each recipe may belong to zero, one, or several folders without copying the recipe. Categories still describe the recipe type (for example Dinner or Dessert). All existing recipes remain visible in All Recipes and do not need to be migrated manually.
+
+**Web:** Use Home → Browse your recipes for immediate folder/category shortcuts; Recipes has Folder, Category, Status, and Search filters. Use **Manage folders & categories** to create, rename, delete or browse a folder. The recipe editor supports multiple folder checkboxes, and recipe details show their folder badges.
+
+**Android:** The main Recipes screen has horizontal folder/category filter chips. Approvers can create, rename and delete folders and create new categories without going to the web app. When creating or editing a recipe, select one category and any number of folders. Folder and category assignments are visible on the recipe screen.
+
+**Permissions and safety:** Folder browsing works for every signed-in family member. Folder/category creation and folder management follow the existing approver permission. Changing an approved recipe still follows existing contribution/approval rules. Folder deletion removes folder assignments only; recipe content, photos, and other folders remain. Pending recipe submissions preserve folder selections and validate their existence before approval. The existing database and Docker volume are reused, with an additive SQLite table for folder names; no recipe data is reset.
