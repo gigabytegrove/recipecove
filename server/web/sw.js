@@ -1,4 +1,4 @@
-const VERSION='recipecove-shell-2.3.4';
+const VERSION='recipecove-shell-2.3.5';
 const ASSETS=['/app/','/app/forknook.css','/app/forknook.js','/app/recipecove-appicon-192.webp','/app/recipecove-appicon-512.webp','/app/recipecove-logo.svg','/app/manifest.json'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(VERSION).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
