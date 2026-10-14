@@ -335,67 +335,211 @@ async function renderAdminImports(){
  content.replaceChildren(adminSectionNav(),container);
 }
 async function renderUpdaterPanel(){
- const status=node('p',{class:'muted',role:'status',text:'Loading RecipeCove updater…'});
- const notice=node('p',{class:'muted small',role:'status',text:''});
+ // Keep progress contextual: after an update succeeds, show the current version
+ // rather than leaving behind a permanent completed progress bar.
+ const busyPhases=new Set(['checking','downloading','verifying','installing','restarting']);
+ const statusTag=node('span',{class:'updater-status',role:'status',text:'Checking for updates…'});
+ const installedVersion=node('strong',{class:'updater-version-number',text:'—'});
+ const newestVersion=node('strong',{class:'updater-version-number',text:'—'});
+ const headline=node('h2',{class:'updater-state-heading',text:'Checking your version…'});
+ const explanation=node('p',{class:'muted updater-description',text:'Looking for the latest compatible RecipeCove release.'});
  const warning=node('p',{class:'warning',role:'alert',hidden:true});
- const progress=node('progress',{value:'0',max:'100',class:'update-progress'});
- const latest=node('p',{class:'muted',text:'Checking published releases…'});
- const checkBtn=button('Check for updates',check,'primary');
- const installBtn=button('Install update',install);
- const rollbackBtn=button('Roll back last update',rollback);
- installBtn.disabled=true;rollbackBtn.disabled=true;
- const overview=card(node('h2',{text:'Application updates'}),
-  node('p',{class:'muted',text:'RecipeCove downloads and verifies compatible server and interface releases, saves them in persistent storage, and restarts itself with rollback protection. No deployment-platform connection, extra container, or host access is required.'}),
-  status,progress,latest,warning,node('div',{class:'toolbar'},checkBtn,installBtn,rollbackBtn),notice);
- const help=card(node('h3',{text:'About this updater'}),
-  node('p',{class:'muted',text:'Updates are applied within RecipeCove. Changes requiring a different base container runtime or system packages cannot be installed by an unprivileged application. The updater identifies those releases instead of claiming they were installed.'}));
- content.replaceChildren(adminSectionNav(),overview,help);
- let latestCheck=null,checking=false,targetVersion=null;
- const showError=message=>{warning.textContent=message;warning.hidden=false;notice.textContent=message;};
+ const releaseLink=node('a',{class:'updater-release-link',target:'_blank',rel:'noopener noreferrer',text:'Read release details ↗',hidden:true});
+ const progress=node('progress',{value:'0',max:'100',class:'update-progress update-progress-large'});
+ const percent=node('strong',{class:'updater-percent',text:'0%'});
+ const task=node('p',{class:'muted small',role:'status',text:''});
+ const milestones=[
+   ['Checking','Checking release'],['Downloading','Downloading files'],
+   ['Verifying','Verifying update'],['Installing','Installing safely'],['Restarting','Restarting']
+ ];
+ const steps=milestones.map(([key,label])=>{
+   const mark=node('span',{class:'updater-step-mark',text:'○'});
+   const item=node('li',{class:'updater-step'},mark,node('span',{text:label}));
+   return {key:key.toLowerCase(),item,mark};
+ });
+ const progressSection=node('section',{class:'updater-running',hidden:true},
+   node('div',{class:'row between'},node('strong',{text:'Updating RecipeCove'}),percent),
+   progress,task,node('ol',{class:'updater-steps'},...steps.map(x=>x.item)));
+ const checkBtn=button('Check again',check);
+ const installBtn=button('Install update',install,'primary');
+ const rollbackBtn=button('Restore previous version',rollback);
+ installBtn.disabled=true;rollbackBtn.hidden=true;rollbackBtn.disabled=true;
+ const main=card(
+   node('div',{class:'row between updater-header'},
+     node('div',{},node('p',{class:'eyebrow',text:'SYSTEM MAINTENANCE'}),
+       node('h2',{text:'Keep RecipeCove up to date'}),
+       node('p',{class:'muted',text:'Updates are checked automatically when you open this page.'})),statusTag),
+   node('div',{class:'updater-versions'},
+     node('section',{class:'updater-version-tile'},node('span',{class:'updater-version-caption',text:'Installed on this server'}),installedVersion),
+     node('section',{class:'updater-version-tile'},node('span',{class:'updater-version-caption',text:'Latest published release'}),newestVersion)),
+   node('section',{class:'updater-summary'},headline,explanation,releaseLink),
+   progressSection,warning,
+   node('div',{class:'updater-actions'},installBtn,checkBtn,rollbackBtn));
+ const detail=card(node('h3',{text:'How updates work'}),
+   node('p',{class:'muted',text:'RecipeCove verifies the update, installs it on your existing server, and restarts automatically. Your recipes, members, photos, and settings remain in persistent storage. If the new version fails its health check, RecipeCove restores the previous version.'}),
+   node('p',{class:'small muted',text:'Some releases need a newer base Docker image or operating-system packages. RecipeCove will tell you when those updates cannot be installed here; it will never silently replace the container.'}));
+ content.replaceChildren(adminSectionNav(),main,detail);
+
+ let available=null,latestCheck=null,targetVersion=null,checking=false,updating=false,seenRunning=null,completedRefresh=false;
+ let operation='idle';
+ const setStatus=(kind,label)=>{
+   statusTag.className='updater-status updater-status-'+kind;
+   statusTag.textContent=label;
+ };
+ const showProblem=(message)=>{
+   warning.hidden=false;warning.textContent=message;
+   headline.textContent='Something needs attention';
+   explanation.textContent=message;
+   setStatus('error','Needs attention');
+ };
+ const synchronizeButtons=()=>{
+   const locked=updating||busyPhases.has(operation)||checking;
+   checkBtn.disabled=locked;
+   installBtn.disabled=locked||!available?.available;
+   installBtn.hidden=!available?.available&&!locked;
+   installBtn.textContent=available?.available?'Install v'+available.latest_version:'Install update';
+   rollbackBtn.disabled=locked;
+ };
+ const setAvailability=(data)=>{
+   latestCheck=data;available=data;
+   newestVersion.textContent=data.latest_version?'v'+data.latest_version:'Unavailable';
+   releaseLink.hidden=true;
+   if(data.release_url){
+     try{
+       const u=new URL(data.release_url);
+       if(u.protocol==='https:'&&u.hostname==='github.com'){
+         releaseLink.href=u.href;releaseLink.hidden=false;
+       }
+     }catch(e){}
+   }
+   if(data.code_error){
+     showProblem('Could not check the latest release: '+data.code_error);
+   }else if(data.requires_image){
+     setStatus('manual','Manual update needed');
+     headline.textContent='A container update is required';
+     explanation.textContent='The new release changes dependencies or the base runtime. Your server cannot safely install it from inside the application. Your recipes and settings stay protected.';
+   }else if(data.available){
+     setStatus('available','Update available');
+     headline.textContent='A newer version is ready';
+     explanation.textContent='RecipeCove v'+data.latest_version+' is available. You are using v'+(data.current_version||'unknown')+'. Install it here without needing an external update service.';
+   }else{
+     setStatus('current','Up to date');
+     headline.textContent='You are up to date';
+     explanation.textContent='Your RecipeCove installation is running the newest compatible release.';
+   }
+   synchronizeButtons();
+ };
  async function refresh(){
-  if(model.page!=='admin-updates'||!model.user)return;
-  try{
-   const result=await api('/admin/updates/status');
-   const op=result.operation||{},installed=result.installed||{};
-   progress.value=Math.max(0,Math.min(100,Number(op.progress)||0));
-   status.textContent='Running '+(result.running_version||'unknown')+' · Installed '+(installed.version||'unknown')+' · '+(op.phase||'idle');
-   if(op.message)notice.textContent=op.message;
-   rollbackBtn.disabled=!installed.previous||['checking','downloading','verifying','installing','restarting'].includes(op.phase);
-   if(op.phase==='failed'&&op.message)showError('Update failed: '+op.message);
-   if(targetVersion&&result.running_version===targetVersion&&op.phase==='ready')location.reload();
-  }catch(e){showError('Cannot read updater status: '+e.message)}
+   if(model.page!=='admin-updates'||!model.user)return;
+   try{
+     const result=await api('/admin/updates/status');
+     const installed=result.installed||{},op=result.operation||{};
+     const running=result.running_version||installed.version||'unknown';
+     installedVersion.textContent='v'+running;
+     rollbackBtn.hidden=!installed.previous;
+     const phase=op.phase||'idle';
+     operation=phase;
+     const active=busyPhases.has(phase);
+     progressSection.hidden=!active;
+     if(active){
+       const amount=Math.max(0,Math.min(100,Number(op.progress)||0));
+       progress.value=amount;
+       percent.textContent=amount+'%';
+       task.textContent=op.message||'Working on your update…';
+       const index=Math.max(0,steps.findIndex(x=>x.key===phase));
+       steps.forEach((s,i)=>{
+         s.item.className='updater-step'+(i<index?' is-done':i===index?' is-active':'');
+         s.mark.textContent=i<index?'✓':i===index?'●':'○';
+       });
+       setStatus('running','Updating…');
+       headline.textContent=phase==='restarting'?'Restarting RecipeCove…':'Installing your update…';
+       explanation.textContent='Please leave this page open while RecipeCove finishes the update.';
+     }else if(phase==='failed'||phase==='rolled_back'){
+       updating=false;targetVersion=null;
+       showProblem(phase==='rolled_back'?'The update did not start successfully; the previous version has been restored.':(op.message||'The update could not be installed.'));
+     }else if(targetVersion&&running===targetVersion&&phase==='ready'){
+       // The server is healthy again. Refresh to load the newly installed UI.
+       targetVersion=null;updating=false;
+       location.reload();
+       return;
+     }else if(targetVersion&&phase==='ready'&&running!==targetVersion){
+       updating=false;targetVersion=null;
+       showProblem('RecipeCove restarted, but the expected version is not running. Check server logs before trying again.');
+     }else if(latestCheck&&!checking){
+       setAvailability(latestCheck);
+     }
+     if(!seenRunning)seenRunning=running;
+     else if(running!==seenRunning&&phase==='ready'&&!completedRefresh){
+       completedRefresh=true;
+       location.reload();
+       return;
+     }
+     synchronizeButtons();
+   }catch(e){
+     if(updating||busyPhases.has(operation)){
+       setStatus('running','Reconnecting…');
+       headline.textContent='Waiting for RecipeCove to restart…';
+       explanation.textContent='The connection may be briefly interrupted during the update. Retrying automatically.';
+     }else showProblem('Could not read the update status: '+e.message);
+   }
  }
  async function check(){
-  if(checking)return;checking=true;checkBtn.disabled=true;warning.hidden=true;
-  latest.textContent='Checking published RecipeCove releases…';
-  try{
-   latestCheck=await api('/admin/updates/check',{method:'POST'});
-   const r=latestCheck;
-   latest.textContent=r.latest_version?'Latest release: '+r.latest_version:'No published release found';
-   installBtn.disabled=!r.available;
-   if(r.code_error)showError(r.code_error);
-   else if(r.requires_image)notice.textContent='This release needs a different base runtime; it cannot be installed by the in-container updater.';
-   else notice.textContent=r.available?'A compatible update is ready to install.':'You are up to date.';
-  }catch(e){installBtn.disabled=true;showError('Update check failed: '+e.message)}
-  finally{checking=false;checkBtn.disabled=false}
+   if(checking||updating||busyPhases.has(operation))return;
+   checking=true;warning.hidden=true;
+   setStatus('checking','Checking…');
+   headline.textContent='Looking for a new release…';
+   explanation.textContent='Connecting securely to the published RecipeCove releases.';
+   synchronizeButtons();
+   try{
+     const result=await api('/admin/updates/check',{method:'POST'});
+     setAvailability(result);
+   }catch(e){
+     available=null;showProblem('Unable to check for updates: '+e.message);
+   }finally{checking=false;synchronizeButtons();}
  }
  async function install(){
-  if(!latestCheck?.available)return;
-  if(!confirm('Install the verified RecipeCove update and restart the application?'))return;
-  try{
-   targetVersion=latestCheck.latest_version;
-   await api('/admin/updates/install',{method:'POST'});
-   installBtn.disabled=true;notice.textContent='Downloading and verifying update…';
-  }catch(e){targetVersion=null;showError('Install failed: '+e.message)}
+   if(!available?.available||updating||busyPhases.has(operation))return;
+   if(!confirm('Install RecipeCove v'+available.latest_version+'? The app will restart automatically. Your recipes and settings will be preserved.'))return;
+   try{
+     warning.hidden=true;targetVersion=available.latest_version;updating=true;
+     await api('/admin/updates/install',{method:'POST'});
+     operation='checking';progressSection.hidden=false;
+     setStatus('running','Update started');
+     headline.textContent='Preparing your update…';
+     explanation.textContent='The server is checking and verifying this release.';
+     synchronizeButtons();
+     await refresh();
+   }catch(e){
+     updating=false;targetVersion=null;operation='failed';
+     showProblem('The update could not start: '+e.message);
+     synchronizeButtons();
+   }
  }
  async function rollback(){
-  if(!confirm('Restore the previous compatible RecipeCove application version?'))return;
-  try{targetVersion=null;await api('/admin/updates/rollback',{method:'POST'});notice.textContent='Rollback requested; the application will restart.'}
-  catch(e){showError('Rollback failed: '+e.message)}
+   if(updating||busyPhases.has(operation))return;
+   if(!confirm('Restore the previous RecipeCove version? Your saved recipes and data will be preserved, and the app will restart.'))return;
+   try{
+     warning.hidden=true;updating=true;
+     await api('/admin/updates/rollback',{method:'POST'});
+     operation='restarting';targetVersion=null;
+     setStatus('running','Restoring previous version…');
+     headline.textContent='Restoring your previous version…';
+     explanation.textContent='RecipeCove will restart automatically. Your data will not be removed.';
+     synchronizeButtons();
+     await refresh();
+   }catch(e){
+     updating=false;operation='failed';showProblem('Rollback could not start: '+e.message);
+     synchronizeButtons();
+   }
  }
- await refresh();await check();
+ // Immediate status and discovery, then follow the actual backend operation.
+ await refresh();
+ if(!busyPhases.has(operation))await check();
  if(model.updaterTimer)clearInterval(model.updaterTimer);
- model.updaterTimer=setInterval(()=>{if(model.page==='admin-updates'&&model.user)refresh();else clearInterval(model.updaterTimer)},5000);
+ model.updaterTimer=setInterval(()=>{
+   if(model.page==='admin-updates'&&model.user)refresh();
+   else clearInterval(model.updaterTimer);
+ },2000);
 }
 
 async function renderApiPanel(){
