@@ -10,7 +10,7 @@ import asyncio
 import os
 import re
 import html as html_util
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlsplit, unquote
 
 import httpx
 from bs4 import BeautifulSoup
@@ -321,6 +321,64 @@ async def _prepare_preview_photo(recipe: dict) -> dict:
     return recipe
 
 
+def _incomplete_publisher_preview(provider: str, url: str, html: str = '', fallback_title: str = '',
+                                  photo: str = '') -> dict:
+    """Never claim a blocked/incomplete publisher article contains a full recipe."""
+    soup=BeautifulSoup(html,'html.parser') if html else None
+    title=(soup.find('h1') if soup else None)
+    label=(title.get_text(' ',strip=True) if title else '') or fallback_title
+    if not label:
+        slug=unquote(urlsplit(url).path.rstrip('/').split('/')[-1])
+        label=slug.replace('-',' ').replace('_',' ').strip().title()
+    if not label:label='Recipe to review'
+    desc=''
+    if soup:
+        description=soup.select_one('meta[property="og:description"],meta[name="description"]')
+        desc=str(description.get('content') or '') if description else ''
+        if not photo:
+            image=soup.select_one('meta[property="og:image"],meta[name="twitter:image"]')
+            photo=str(image.get('content') or '') if image else ''
+    note='This publisher did not provide complete recipe details automatically. Open the original recipe to check the ingredients and directions before you save.'
+    result=base.RecipePayload(
+        title=label[:300], description=desc[:6000], source_url=url,
+        image_url=photo[:2000] if photo.startswith('https://') else '',
+        ingredients=[],instructions=[],requires_manual_review=True
+    ).model_dump()
+    result['preview_notice']=note
+    return result
+
+
+async def _wp_rest_preview(provider: str, url: str) -> dict | None:
+    """Try a publisher's public post JSON if its HTML recipe page blocks parsing."""
+    import recipes
+    host=WP_SITES[provider][1]
+    slug=unquote(urlsplit(url).path.rstrip('/').split('/')[-1])
+    if not slug or '/' in slug or len(slug)>160:return None
+    try:
+        posts=await _get_json('https://'+host+'/wp-json/wp/v2/posts',
+                              {'slug':slug,'per_page':'1','_embed':'wp:featuredmedia'})
+    except (HTTPException,OSError,ValueError):
+        return None
+    if not isinstance(posts,list):return None
+    for post in posts[:2]:
+        if not isinstance(post,dict):continue
+        link=str(post.get('link') or '')
+        if not _allowed_publisher_url(provider,link):continue
+        raw_content=post.get('content') or {}
+        html=str(raw_content.get('rendered') or '') if isinstance(raw_content,dict) else ''
+        if not html:continue
+        parsed=recipes.parse_document(html,url)
+        draft=base.from_parsed(parsed)
+        draft['source_url']=url
+        draft['image_url']=draft.get('image_url') or _wp_image(post)
+        if draft.get('ingredients') and draft.get('instructions'):
+            return draft
+        title=post.get('title') or {}
+        readable=BeautifulSoup(str(title.get('rendered') or ''),'html.parser').get_text(' ',strip=True) if isinstance(title,dict) else ''
+        return _incomplete_publisher_preview(provider,url,html,readable,_wp_image(post))
+    return None
+
+
 @router.get('/preview')
 async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_length=1,max_length=220),
                   who:dict=Depends(base.principal)):
@@ -330,13 +388,22 @@ async def preview(provider:str=Query(...,max_length=30),id:str=Query(...,min_len
         if not _allowed_publisher_url(provider,id):
             raise HTTPException(422,'Invalid recipe publisher URL')
         import recipes
+        source_html=''
         try:
             source_html,source_url=await recipes.page_html(id)
             parsed=recipes.parse_document(source_html,source_url)
-            item=base.RecipePayload.model_validate(base.from_parsed(parsed))
-            return await _prepare_preview_photo(item.model_dump())
-        except (ValueError,TypeError) as exc:
-            raise HTTPException(422,'Publisher page could not be converted to a recipe; use Import from URL') from exc
+            draft=base.from_parsed(parsed)
+            draft['source_url']=id
+            if draft.get('ingredients') and draft.get('instructions'):
+                return await _prepare_preview_photo(draft)
+        except (ValueError,TypeError):
+            pass  # Publishers can deny automated HTML access or omit recipe cards.
+        # A publisher post API can still contain the recipe when the HTML does not.
+        rest=await _wp_rest_preview(provider,id)
+        if rest and rest.get('ingredients') and rest.get('instructions'):
+            return await _prepare_preview_photo(rest)
+        incomplete=rest or _incomplete_publisher_preview(provider,id,source_html)
+        return await _prepare_preview_photo(incomplete)
     if provider=='themealdb':
         if not re.fullmatch(r'\d{1,12}',id):raise HTTPException(422,'Invalid meal ID')
         info=await _get_json(f'{MEALDB}/{_meal_key()}/lookup.php',{'i':id})
