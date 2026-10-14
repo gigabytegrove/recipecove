@@ -66,6 +66,49 @@ def _allowed_publisher_url(provider:str,url:str) -> bool:
     except ValueError:return False
 
 
+def _wp_image(row: dict) -> str:
+    """Find a public featured thumbnail in an embedded WordPress post."""
+    media=(row.get('_embedded') or {}).get('wp:featuredmedia') or []
+    if isinstance(media,list) and media and isinstance(media[0],dict):
+        photo=media[0]
+        sizes=(photo.get('media_details') or {}).get('sizes') or {}
+        value=(sizes.get('medium_large') or sizes.get('medium') or {}).get('source_url') or photo.get('source_url')
+        if isinstance(value,str) and value.startswith('https://'):
+            return value[:2000]
+    seo=row.get('yoast_head_json') or {}
+    images=seo.get('og_image') or []
+    if isinstance(images,list) and images and isinstance(images[0],dict):
+        value=images[0].get('url')
+        if isinstance(value,str) and value.startswith('https://'):
+            return value[:2000]
+    return ''
+
+
+async def _wp_search_thumbnails(host: str, rows: list) -> dict[int,str]:
+    """One best-effort REST call for images; do not fetch each result page."""
+    ids=[]
+    for row in rows:
+        if not isinstance(row,dict):continue
+        value=row.get('id')
+        if isinstance(value,int) and value>0:
+            ids.append(value)
+    if not ids:return {}
+    try:
+        posts=await _get_json('https://'+host+'/wp-json/wp/v2/posts',
+                              {'include':','.join(map(str,ids[:40])),
+                               'per_page':str(min(len(ids),40)),
+                               '_embed':'wp:featuredmedia'})
+    except (HTTPException,OSError,ValueError):
+        return {}
+    if not isinstance(posts,list):return {}
+    thumbnails={}
+    for post in posts:
+        if isinstance(post,dict) and isinstance(post.get('id'),int):
+            image=_wp_image(post)
+            if image:thumbnails[post['id']]=image
+    return thumbnails
+
+
 async def _get_json(url: str, params: dict) -> dict | list:
     """Provider URLs are fixed constants; never follow redirects or proxy LAN hosts."""
     try:
@@ -125,6 +168,7 @@ async def search(provider:str=Query(...,max_length=30),mode:str=Query('name',max
         rows=await _get_json('https://'+host+'/wp-json/wp/v2/search',
                              {'search':term,'per_page':'40','type':'post'})
         if not isinstance(rows,list):raise HTTPException(502,'Unexpected recipe publisher response')
+        thumbnails=await _wp_search_thumbnails(host,rows)
         items=[]
         for row in rows:
             if not isinstance(row,dict):continue
@@ -132,8 +176,9 @@ async def search(provider:str=Query(...,max_length=30),mode:str=Query('name',max
             if not _allowed_publisher_url(provider,url):continue
             title=BeautifulSoup(str(row.get('title') or ''),'html.parser').get_text(' ',strip=True)
             if not title:continue
+            image=_wp_image(row) or thumbnails.get(row.get('id'),'')
             items.append({'provider':provider,'id':url,'title':html_util.unescape(title)[:200],
-               'image_url':'','description':'Recipe article from '+label,'source_url':url})
+               'image_url':image,'description':'Recipe article from '+label,'source_url':url})
         return {'provider':provider,'mode':mode,'query':q,'items':items[:40],
                 'notice':'Searches '+label+'\u0027s public articles. Ingredient searches use the publisher\u0027s full-text index; preview retrieves the actual recipe and photo.'}
     if provider=='all':
