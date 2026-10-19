@@ -1,4 +1,4 @@
-"""Forknook standalone family RMS. No KitchenOwl login, database or dependency.
+"""RecipeCove standalone family RMS. No KitchenOwl login, database or dependency.
 
 Uses one SQLite database on the existing persistent /data volume. All operations
 are scoped to authenticated family members, with admin-only account management.
@@ -31,7 +31,7 @@ import media
 import updater
 import settings_store
 
-router = APIRouter(prefix="/api/v2", tags=["Forknook"])
+router = APIRouter(prefix="/api/v2", tags=["RecipeCove"])
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 DB_FILE = DATA_DIR / "forknook.sqlite3"
 CLAIM_FILE = DATA_DIR / ".forknook-claim"
@@ -115,7 +115,7 @@ def initialize():
             os.chmod(CLAIM_FILE, 0o600)
         # Only shown in container logs on first boot; never exposed via HTTP.
         import logging
-        logging.getLogger("forknook").warning("Forknook first-run setup code: %s", CLAIM_FILE.read_text().strip())
+        logging.getLogger("forknook").warning("RecipeCove first-run setup code: %s", CLAIM_FILE.read_text().strip())
     else:
         CLAIM_FILE.unlink(missing_ok=True)
     os.chmod(DB_FILE, 0o600)
@@ -161,7 +161,7 @@ def new_session(db, user_id: int) -> str:
 
 def principal(authorization: str | None = Header(default=None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Sign in to Forknook")
+        raise HTTPException(401, "Sign in to RecipeCove")
     token = authorization[7:]
     if not (20 <= len(token) <= 256):
         raise HTTPException(401, "Invalid session")
@@ -270,7 +270,7 @@ def _user_record(row, db=None):
 
 @router.get("/setup/status")
 def setup_status():
-    return {"configured":configured(),"product":"Forknook","requires_kitchenowl":False}
+    return {"configured":configured(),"product":"RecipeCove","requires_kitchenowl":False}
 
 @router.post("/setup/complete")
 def setup(body: Setup, request: Request):
@@ -279,7 +279,7 @@ def setup(body: Setup, request: Request):
     if not 1 <= len(body.display_name.strip()) <= 100:raise HTTPException(422,"Invalid display name")
     with LOCK, database() as db:
         if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-            raise HTTPException(409,"Forknook has already been configured")
+            raise HTTPException(409,"RecipeCove has already been configured")
         if not CLAIM_FILE.exists() or not hmac.compare_digest(body.setup_code,CLAIM_FILE.read_text().strip()):
             raise HTTPException(403,"Incorrect first-run setup code")
         salt = secrets.token_bytes(24)
@@ -299,7 +299,7 @@ def login(body: Credentials,request:Request):
         salt=bytes.fromhex(row["salt"]) if row else b'\x00'*24
         actual=password_hash(body.password,salt)
         if not row or not hmac.compare_digest(actual,row["digest"]):
-            raise HTTPException(401,"Invalid Forknook username or password")
+            raise HTTPException(401,"Invalid RecipeCove username or password")
         token=new_session(db,row["id"])
         db.commit()
         return {"token":token,"user":_user_record(row)}
@@ -755,7 +755,7 @@ async def _feed_preview(url:str):
             try:recipes.validate_external_url(current)
             except ValueError as exc:raise HTTPException(422,str(exc)) from exc
             try:
-                async with client.stream("GET",current,headers={"User-Agent":"Forknook/2.0 (recipe feed reader)"}) as response:
+                async with client.stream("GET",current,headers={"User-Agent":"RecipeCove/2.3 (recipe feed reader)"}) as response:
                     if response.status_code in (301,302,303,307,308):
                         dest=response.headers.get("location")
                         if not dest:raise HTTPException(422,"Feed redirect missing location")

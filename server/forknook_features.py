@@ -1,4 +1,4 @@
-"""Forknook 2.1: approvals, migration, integration APIs.
+"""RecipeCove: approvals, migration, integration APIs.
 
 This module deliberately extends the existing SQLite store instead of replacing it.
 Old members become contributors and every pre-existing recipe stays published
@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 import forknook as base
 
-router=APIRouter(prefix='/api/v2',tags=['Forknook family workflows'])
+router=APIRouter(prefix='/api/v2',tags=['RecipeCove family workflows'])
 ROLES=('admin','approver','contributor','viewer')
 DEFAULT_CATEGORIES=(
     ('Breakfast','#E7A44B'),('Lunch','#A6B65B'),('Dinner','#59755A'),
@@ -203,7 +203,7 @@ def revoke_api_key(key_id:int,who:dict=Depends(base.admin)):
 
 def public_key(x_forknook_api_key:str|None=Header(default=None)):
     key=x_forknook_api_key or ''
-    if not key.startswith('fnk_') or len(key)>256:raise HTTPException(401,'Valid Forknook API key required')
+    if not key.startswith('fnk_') or len(key)>256:raise HTTPException(401,'Valid RecipeCove API key required')
     digest=hashlib.sha256(key.encode()).hexdigest()
     with base.LOCK,base.database() as db:
         row=db.execute('SELECT id FROM api_keys WHERE token_hash=? AND revoked_at IS NULL AND scope=?',
