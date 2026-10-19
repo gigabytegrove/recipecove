@@ -1,0 +1,135 @@
+name: RecipeCove repository housekeeping
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/repository-housekeeping.yml
+
+permissions:
+  contents: read
+
+jobs:
+  update-about:
+    name: Update GitHub About and topics
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Update repository profile
+        env:
+          PROFILE_TOKEN: ${{ secrets.RECIPECOVE_ADMIN_TOKEN || secrets.FORKNOOK_RELEASE_TOKEN || github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          repo = os.environ['REPOSITORY']
+          assert repo == 'gigabytegrove/recipecove', 'Repository identity changed; refusing update'
+          token = os.environ['PROFILE_TOKEN']
+          description = ('RecipeCove is a self-hosted family recipe manager with web/PWA '
+                         'and native Android apps, recipe imports, shared folders, meal plans and shopping lists.')
+          topics = ['recipecove', 'recipe-manager', 'recipes', 'self-hosted', 'docker',
+                    'android', 'pwa', 'meal-planning', 'shopping-list', 'recipe-importer',
+                    'family-recipes']
+          def request(method, path, body):
+              payload = json.dumps(body).encode('utf-8')
+              req = urllib.request.Request('https://api.github.com' + path, data=payload,
+                  headers={'Authorization':'Bearer ' + token,
+                           'Accept':'application/vnd.github+json',
+                           'X-GitHub-Api-Version':'2022-11-28',
+                           'Content-Type':'application/json'},
+                  method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as res:
+                      return json.loads(res.read().decode())
+              except urllib.error.HTTPError as exc:
+                  print('GitHub profile update denied (HTTP %s).' % exc.code)
+                  print('Configure RECIPECOVE_ADMIN_TOKEN with repository administration '
+                        'and metadata write rights, then rerun this workflow.')
+                  raise
+          updated = request('PATCH', '/repos/' + repo, {'description':description})
+          assert updated.get('description') == description, 'Repository description did not persist'
+          result = request('PUT', '/repos/' + repo + '/topics', {'names':topics})
+          assert set(result.get('names', [])) == set(topics), 'Repository topics did not persist'
+          print('Updated GitHub About description and all project topics.')
+          PY
+
+  prune-legacy-releases:
+    name: Delete releases and tags before v2.3.0
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Purge only pre-v2.3.0 releases and associated version tags
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request, urllib.error
+          repo = os.environ['REPOSITORY']
+          assert repo == 'gigabytegrove/recipecove', 'Repository identity changed; refusing cleanup'
+          token = os.environ['GITHUB_TOKEN']
+          prefix = '/repos/' + repo
+          pattern = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
+          minimum = (2, 3, 0)
+          def version(tag):
+              match = pattern.fullmatch(tag)
+              return tuple(map(int, match.groups())) if match else None
+          def request(method, path, missing_ok=False):
+              req = urllib.request.Request('https://api.github.com' + path,
+                  headers={'Authorization': 'Bearer ' + token,
+                           'Accept': 'application/vnd.github+json',
+                           'X-GitHub-Api-Version': '2022-11-28'},
+                  method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as res:
+                      raw = res.read()
+                      return json.loads(raw) if raw else None
+              except urllib.error.HTTPError as exc:
+                  if missing_ok and exc.code == 404:
+                      return None
+                  print('GitHub API failed: %s %s -> HTTP %s' % (method, path, exc.code))
+                  raise
+          def releases():
+              items=[]
+              for page in range(1,20):
+                  batch=request('GET', prefix+'/releases?per_page=100&page='+str(page))
+                  items+=batch
+                  if len(batch)<100: break
+              else: raise RuntimeError('Pagination safety limit reached')
+              return items
+          def tags():
+              return request('GET', prefix+'/git/matching-refs/tags/')
+          initial=releases()
+          old=[r for r in initial if (version(r.get('tag_name','')) is not None and
+                                       version(r['tag_name']) < minimum)]
+          if len(old)>100: raise RuntimeError('Unexpected legacy release count; refusing cleanup')
+          remaining=[r for r in initial if version(r.get('tag_name','')) is None or
+                                             version(r['tag_name'])>=minimum]
+          if not any(r.get('tag_name')=='v2.3.0' for r in remaining):
+              raise RuntimeError('v2.3.0 baseline release absent; refusing cleanup')
+          print('Keeping '+str(len(remaining))+' releases including v2.3.0 onward')
+          print('Deleting '+str(len(old))+' legacy releases')
+          for r in old:
+              tag=r['tag_name']
+              print('Deleting release '+tag)
+              request('DELETE', prefix+'/releases/'+str(r['id']))
+          old_tags=[ref['ref'][len('refs/tags/'):] for ref in tags()
+                    if ref.get('ref','').startswith('refs/tags/')
+                    and version(ref['ref'][len('refs/tags/'):]) is not None
+                    and version(ref['ref'][len('refs/tags/'):])<minimum]
+          for tag in old_tags:
+              print('Deleting tag '+tag)
+              request('DELETE', prefix+'/git/refs/tags/'+tag, missing_ok=True)
+          residual=[r['tag_name'] for r in releases()
+                    if version(r.get('tag_name','')) is not None
+                    and version(r['tag_name'])<minimum]
+          residual_tags=[r['ref'] for r in tags()
+                         if r.get('ref','').startswith('refs/tags/')
+                         and version(r['ref'][len('refs/tags/'):]) is not None
+                         and version(r['ref'][len('refs/tags/'):])<minimum]
+          if residual or residual_tags:
+              raise RuntimeError('Legacy versions remain: '+repr(residual+residual_tags))
+          print('Verified: no release or version tag older than v2.3.0 remains.')
+          PY
