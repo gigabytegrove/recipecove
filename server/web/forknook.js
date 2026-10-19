@@ -72,12 +72,12 @@ async function renderAbout(){
  const about=card(node('div',{class:'about-brand'},node('img',{src:'/app/recipecove-logo.svg',alt:'RecipeCove by Gigabyte Grove'})),
   node('h2',{text:'About RecipeCove'}),
   node('p',{text:'RecipeCove is a family recipe management system developed and released by Gigabyte Grove. It brings recipes, planning what to make, and shopping lists together in one self-hosted kitchen.'}),
-  node('h3',{text:'Built for your kitchen'}),
-  node('p',{text:'Save and organize recipes, import from compatible sources, discover something new, plan recipes for specific days, and generate shopping lists.'}),
+  node('h3',{text:'Your recipes, organized'}),
+  node('p',{text:'Keep recipes in shared folders and categories, import recipes from supported sources, discover new dishes, plan what to make, and build shopping lists with your family.'}),
   node('h3',{text:'Privacy and control'}),
   node('p',{text:'Your RecipeCove server runs in your own environment. Family accounts and recipes are managed by your instance administrator. Optional external import and discovery features may contact the source you choose.'}),
   node('h3',{text:'Software information'}),
-  node('p',{text:'RecipeCove is published by Gigabyte Grove. Release and update information is available under Administration → Updates for administrators.'}),
+  node('p',{text:'RecipeCove is an independently self-hosted project from Gigabyte Grove. Source code, release notes, and downloads are maintained at github.com/gigabytegrove/recipecove. Administrators can install compatible updates from Administration → Updates.'}),
   node('a',{href:'https://github.com/gigabytegrove/recipecove',target:'_blank',rel:'noopener noreferrer',text:'RecipeCove on GitHub ↗'}));
  content.replaceChildren(about);
 }

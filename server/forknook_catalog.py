@@ -1,4 +1,4 @@
-"""Read-only recipe discovery providers for the standalone Forknook RMS.
+"""Read-only recipe discovery providers for the standalone RecipeCove RMS.
 
 Only hardcoded public catalog APIs are queried (no user-supplied request URLs).
 Searching and previewing never saves a recipe; the normal /recipes endpoint
@@ -24,7 +24,7 @@ import forknook_images
 router = APIRouter(prefix='/api/v2/discovery', tags=['Recipe discovery'])
 MEALDB = 'https://www.themealdb.com/api/json/v1'
 WIKIBOOKS = 'https://en.wikibooks.org/w/api.php'
-USER_AGENT = 'Forknook/2.1 (self-hosted recipe discovery; contact via GitHub gigabytegrove/forknook)'
+USER_AGENT = 'RecipeCove/2.3 (self-hosted recipe discovery; https://github.com/gigabytegrove/recipecove)'
 WP_SITES = {
     'budgetbytes': ('Budget Bytes','www.budgetbytes.com'),
     'spendwithpennies': ('Spend With Pennies','www.spendwithpennies.com'),
