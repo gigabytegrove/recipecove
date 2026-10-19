@@ -6,7 +6,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.7 · stable.** GitHub: https://github.com/gigabytegrove/forknook
+**Release: 2.3.8 · stable.** GitHub: https://github.com/gigabytegrove/recipecove
 
 ## Features
 
@@ -25,7 +25,7 @@ RecipeCove is a standalone, self-hosted family recipe manager published by Gigab
 ```yaml
 services:
   forknook:
-    image: ghcr.io/gigabytegrove/forknook:latest
+    image: ghcr.io/gigabytegrove/recipecove:latest
     pull_policy: always
     container_name: forknook
     restart: unless-stopped
@@ -52,16 +52,18 @@ volumes:
 
 Open `http://YOUR-HOST:8999/app/`, retrieve the first-run setup code from `docker logs forknook`, and create the administrator account. For remote access, use HTTPS with a reverse proxy. The `/data` volume contains accounts, sessions, recipes, settings, downloaded images and updater state. **Back up the entire `/data` volume** (with a consistent SQLite backup/snapshot); backing up only `forknook.sqlite3` omits photographs. Never discard named volumes during an update.
 
+Existing installations should retain the original Compose service key and named volume names; renaming these would create different volumes and hide existing user data. The repository and image addresses have changed, not the persistent storage identifiers.
+
 After this first image deployment, compatible code/UI updates are available at **Administration → Updates**, `/app/admin/updates`. Versions with new Docker dependencies or launcher requirements must be deployed by pulling an updated image.
 
 ### Emergency recovery image update
 
-Run on the Docker host after verifying its Compose service uses `ghcr.io/gigabytegrove/forknook:latest`:
+Run on the Docker host after verifying its Compose service uses `ghcr.io/gigabytegrove/recipecove:latest`. For an existing installation, change only the Compose image reference from `ghcr.io/gigabytegrove/forknook:latest` to `ghcr.io/gigabytegrove/recipecove:latest` first; keep its service key, container name and existing named volumes unchanged:
 
 ```bash
-curl -fL --retry 3 -o /tmp/forknook-update.sh \
-  https://raw.githubusercontent.com/gigabytegrove/forknook/main/scripts/update-existing-forknook.sh
-bash -n /tmp/forknook-update.sh && sudo bash /tmp/forknook-update.sh
+curl -fL --retry 3 -o /tmp/recipecove-update.sh \
+  https://raw.githubusercontent.com/gigabytegrove/recipecove/main/scripts/update-existing-recipecove.sh
+bash -n /tmp/recipecove-update.sh && sudo bash /tmp/recipecove-update.sh
 ```
 
 The script identifies exactly one running RecipeCove Compose service, validates the Compose project and image, pulls the image, recreates **the existing service** without deleting volumes, waits for the intended release health version, and attempts to restore the prior image on startup failure. Read the script before running it. The original KitchenOwl container/database is never touched.
@@ -100,7 +102,7 @@ X-RecipeCove-API-Key: fnk_<secret>
 
 Only recipes that an approver/admin marks `published: true` are returned. The response omits internal notes, evidence, users, meal/shopping lists and review history. WordPress should proxy recipe photo requests server-side with its API key. Public publication is not automatic when approving for family use; the two actions are distinct.
 
-## Native Kotlin Android client (2.3.7 stable)
+## Native Kotlin Android client (2.3.8 stable)
 
 RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
 
@@ -109,9 +111,11 @@ Native screens cover sign-in, the recipe/photo library, full-page recipe details
 To build on the same Windows PC as Calden, open PowerShell:
 
 ```powershell
-$repo = Join-Path $HOME 'forknook'
-if (-not (Test-Path "$repo\.git")) { git clone https://github.com/gigabytegrove/forknook.git $repo }
+$repo = Join-Path $HOME 'recipecove'
+if (-not (Test-Path "$repo\.git")) { git clone https://github.com/gigabytegrove/recipecove.git $repo }
 Set-Location $repo
+git remote set-url origin https://github.com/gigabytegrove/recipecove.git
+if ($LASTEXITCODE -ne 0) { throw 'Cannot update Git origin.' }
 git pull --ff-only origin main
 if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'android\build-apk.ps1')
@@ -213,7 +217,7 @@ Adds direct-page support for /app/about and regression tests that ensure unrecog
 External recipe and image fetches now pin connections to public validated addresses, preserving HTTPS SNI and checking redirects. Android HTTP logins require explicit per-origin risk acceptance; Android session tokens migrate to Keystore AES-GCM encrypted storage. Web HTTP sessions also require explicit per-origin risk acceptance. Server CI tokens now use least privilege and immutable action revisions. A weekly dependency security scanning workflow has been added. Security work still outstanding includes browser HttpOnly cookie migration, fully deterministic runtime images, and on-deployment penetration testing.
 
 
-## RecipeCove rename rollout (2.3.4)
+## RecipeCove rename rollout (2.3.4, historical migration guidance)
 
 **Do not rename the existing GitHub repository until RecipeCove 2.3.4 is installed and verified in your running instance.** Version 2.3.4 contains an updater bridge that first checks the future RecipeCove repository and falls back to the current repository during migration. The first 2.3.4 GitHub release must publish **both** RecipeCove and legacy Forknook server asset filenames so the existing updater can install it. The REST API path `/api/v2`, database schema, saved recipe photographs, user identities, Android package identifier and Android session storage names remain unchanged for upgrade compatibility. They are internal compatibility identifiers, not user-facing branding. The existing Compose data volume and service key stay unchanged deliberately to prevent losing persisted data. After installation and repo rename, future releases use the new URL and product name.
 

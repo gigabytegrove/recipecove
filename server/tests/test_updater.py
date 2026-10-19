@@ -39,7 +39,7 @@ def make_release(server: Path, version: str = '2.1.0', change_dep=False):
             tf.addfile(info, io.BytesIO(content))
     blob = bundle.getvalue()
     tag='v'+version
-    origin='https://github.com/gigabytegrove/forknook/releases/download/'+tag+'/'
+    origin='https://github.com/gigabytegrove/recipecove/releases/download/'+tag+'/'
     desc={'tag_name':tag,'html_url':origin,'assets':[
         {'name':f'forknook-server-{version}.tar.gz','browser_download_url':origin+f'forknook-server-{version}.tar.gz'},
         {'name':f'forknook-server-{version}.sha256','browser_download_url':origin+f'forknook-server-{version}.sha256'},
@@ -80,7 +80,7 @@ def test_update_bundle_integrity_and_docker_compat(patches,monkeypatch):
     server,release,blob=patches
     r=updater._release()
     result=updater._verified_files(r)
-    assert result['app.py'] and b'2.3.7' in result['app.py']
+    assert result['app.py'] and b'2.3.8' in result['app.py']
     desc,altered=make_release(server,change_dep=True)
     original=updater._https_get
     monkeypatch.setattr(updater,'_https_get',lambda u, n=0: (hashlib.sha256(altered).hexdigest().encode() if u.endswith('.sha256') else altered if u.endswith('.tar.gz') else original(u,n)))

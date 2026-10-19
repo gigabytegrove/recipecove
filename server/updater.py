@@ -25,7 +25,6 @@ from fastapi import HTTPException
 DATA = Path(os.environ.get('DATA_DIR', '/data')) / 'updates'
 BASE = Path('/app')
 REPO = os.environ.get('RECIPECOVE_GITHUB_REPO', 'gigabytegrove/recipecove')
-LEGACY_REPO = 'gigabytegrove/forknook'
 API = f'https://api.github.com/repos/{REPO}/releases/latest'
 ACTIVE = DATA / 'active.json'
 STATUS = DATA / 'status.json'
@@ -80,21 +79,11 @@ def _https_get(url: str, size: int = _MAX_PACKAGE) -> bytes:
 
 
 def _release() -> dict:
-    # During the rename window, the owner intentionally keeps the existing
-    # repository until the new version is installed on production. Prefer the
-    # new repository; only use the legacy name while migration is incomplete.
-    info = None
-    repo = REPO
-    for candidate in dict.fromkeys((REPO, LEGACY_REPO)):
-        try:
-            info = json.loads(_https_get(
-                f'https://api.github.com/repos/{candidate}/releases/latest', 250_000))
-            repo = candidate
-            break
-        except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
-            continue
-    if info is None:
-        raise ValueError('Cannot find a RecipeCove release')
+    # Releases are resolved exclusively from the renamed, owner-controlled repository.
+    # Retain legacy asset *filenames* for existing installations, not old repository URLs.
+    info = json.loads(_https_get(API, 250_000))
+    if not isinstance(info, dict):
+        raise ValueError('Invalid RecipeCove release response')
     version = info.get('tag_name', '')
     _semver(version)
     assets = info.get('assets', [])
@@ -110,20 +99,12 @@ def _release() -> dict:
     if not bundle or not checksum:
         raise ValueError('Latest release is missing verified application files')
     # Explicitly validate the source; never fetch untrusted response URLs.
-    allowed_repositories = tuple(dict.fromkeys((repo, REPO, LEGACY_REPO)))
-    accepted_roots = [
-        f'https://github.com/{candidate}/releases/download/{version}/'
-        for candidate in allowed_repositories
-    ]
+    accepted_root = f'https://github.com/{REPO}/releases/download/{version}/'
     for url in (bundle, checksum):
-        if not isinstance(url, str) or not any(
-                url.startswith(root) for root in accepted_roots):
+        if not isinstance(url, str) or not url.startswith(accepted_root):
             raise ValueError('Unexpected release asset URL')
-    asset_repo = next(candidate for candidate in allowed_repositories
-                      if bundle.startswith(
-                          f'https://github.com/{candidate}/releases/download/{version}/'))
     return {'version': version.lstrip('v'), 'tag': version, 'bundle': bundle,
-            'checksum': checksum, 'url': info.get('html_url', ''), 'repo': asset_repo}
+            'checksum': checksum, 'url': info.get('html_url', ''), 'repo': REPO}
 
 
 def check() -> dict:
