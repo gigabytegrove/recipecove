@@ -2,27 +2,27 @@
 # Update an existing RecipeCove Compose container in place without losing volumes.
 # Does not deploy a second stack, modify Compose files, or remove user data.
 set -Eeuo pipefail
-IMAGE='ghcr.io/gigabytegrove/forknook:latest'
-EXPECTED="${FORKNOOK_TARGET_VERSION:-2.2.3}"
+IMAGE='ghcr.io/gigabytegrove/recipecove:latest'
+EXPECTED="${RECIPECOVE_TARGET_VERSION:-2.3.8}"
 [[ "$EXPECTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid RecipeCove version" >&2; exit 1; }
-PINNED_IMAGE="ghcr.io/gigabytegrove/forknook:$EXPECTED"
+PINNED_IMAGE="ghcr.io/gigabytegrove/recipecove:$EXPECTED"
 
 for executable in docker python3; do
   command -v "$executable" >/dev/null || { echo "ERROR: $executable is required" >&2; exit 1; }
 done
 docker compose version >/dev/null
 
-echo '===== FORKNOOK SAFE MANUAL DOCKER UPDATE ====='
+echo '===== RECIPECOVE SAFE MANUAL DOCKER UPDATE ====='
 MATCHES=()
 while IFS= read -r id; do
   [[ -n "$id" ]] || continue
   image="$(docker inspect -f '{{.Config.Image}}' "$id")"
-  if [[ "$image" == ghcr.io/gigabytegrove/forknook:* ]]; then
+  if [[ "$image" == ghcr.io/gigabytegrove/recipecove:* || "$image" == ghcr.io/gigabytegrove/forknook:* ]]; then
     MATCHES+=("$id")
   fi
 done < <(docker ps -q)
 if (( ${#MATCHES[@]} != 1 )); then
-  echo 'ERROR: Expected exactly one running RecipeCove container using ghcr.io/gigabytegrove/forknook.' >&2
+  echo 'ERROR: Expected exactly one running RecipeCove container using ghcr.io/gigabytegrove/recipecove.' >&2
   docker ps --format '{{.Names}}  {{.Image}}'
   exit 1
 fi
@@ -33,7 +33,7 @@ SERVICE="$(label com.docker.compose.service)"
 WORKDIR="$(label com.docker.compose.project.working_dir)"
 FILES="$(label com.docker.compose.project.config_files)"
 for value in "$PROJECT" "$SERVICE" "$WORKDIR" "$FILES"; do
-  [[ -n "$value" && "$value" != '<no value>' ]] || { echo 'ERROR: Compose metadata unavailable; update through Dokploy instead.' >&2; exit 1; }
+  [[ -n "$value" && "$value" != '<no value>' ]] || { echo 'ERROR: Compose metadata unavailable; update through your Compose deployment manager instead.' >&2; exit 1; }
 done
 [[ -d "$WORKDIR" ]] || { echo "ERROR: Compose working directory not found: $WORKDIR" >&2; exit 1; }
 args=(-p "$PROJECT" --project-directory "$WORKDIR")
@@ -54,7 +54,7 @@ print(project["services"][sys.argv[1]].get("image", ""))
 ' "$SERVICE")"
 if [[ "$ACTUAL" != "$IMAGE" ]]; then
   echo "ERROR: Compose service $SERVICE currently specifies: $ACTUAL" >&2
-  echo "Set its image to $IMAGE in Dokploy, save, then rerun this script." >&2
+  echo "Set its image to $IMAGE in your existing Compose configuration, save it without renaming volumes, then rerun this script." >&2
   exit 1
 fi
 OLD_ID="$(docker inspect -f '{{.Image}}' "$CID")"

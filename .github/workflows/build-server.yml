@@ -20,7 +20,7 @@ jobs:
           python-version: '3.12'
       - name: Install Python requirements
         run: python -m pip install -r server/requirements.txt pytest
-      - name: Verify Forknook browser JavaScript
+      - name: Verify RecipeCove browser JavaScript
         run: node --check server/web/forknook.js
       - name: Test backend
         run: python -m pytest -q server/tests
@@ -54,7 +54,7 @@ jobs:
             ghcr.io/gigabytegrove/recipecove:latest
             ghcr.io/gigabytegrove/recipecove:${{ steps.version.outputs.version }}
           labels: |
-            org.opencontainers.image.source=https://github.com/gigabytegrove/forknook
+            org.opencontainers.image.source=https://github.com/gigabytegrove/recipecove
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -96,7 +96,7 @@ jobs:
           PY
       - name: Publish a stable GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.FORKNOOK_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.RECIPECOVE_RELEASE_TOKEN || secrets.FORKNOOK_RELEASE_TOKEN || github.token }}
         run: |
           set -Eeuo pipefail
           TAG="v${VERSION}"

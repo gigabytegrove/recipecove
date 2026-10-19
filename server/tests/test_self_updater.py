@@ -15,7 +15,7 @@ def test_release_check_requires_no_container_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(updater, 'ACTIVE', tmp_path / 'absent.json')
     monkeypatch.setattr(updater, '_IMAGE_VERSION', '2.1.5')
     monkeypatch.setattr(updater, '_release', lambda: {
-        'version':'2.1.6', 'url':'https://github.com/gigabytegrove/forknook/releases/tag/v2.1.6'
+        'version':'2.1.6', 'url':'https://github.com/gigabytegrove/recipecove/releases/tag/v2.1.6'
     })
     observed = []
     def response(url, size=None):
