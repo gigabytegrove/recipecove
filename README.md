@@ -24,12 +24,14 @@ RecipeCove is a standalone, self-hosted family recipe manager published by Gigab
 
 ## Platform-agnostic container deployment
 
+**Fresh installations:** use the Compose example below. **Existing installations:** keep your current Compose project, service key, container name and named volumes; change only the image reference to `ghcr.io/gigabytegrove/recipecove:latest`. Replacing the old stack or renaming its volumes can make existing recipes and users appear missing.
+
 ```yaml
 services:
-  forknook:
+  recipecove:
     image: ghcr.io/gigabytegrove/recipecove:latest
     pull_policy: always
-    container_name: forknook
+    container_name: recipecove
     restart: unless-stopped
     ports:
       - "8999:8999"
@@ -43,16 +45,16 @@ services:
     mem_limit: 1536m
     memswap_limit: 1536m
     volumes:
-      - forknook-data:/data
-      - forknook-models:/models
-      - forknook-tmp:/tmp
+      - recipecove-data:/data
+      - recipecove-models:/models
+      - recipecove-tmp:/tmp
 volumes:
-  forknook-data:
-  forknook-models:
-  forknook-tmp:
+  recipecove-data:
+  recipecove-models:
+  recipecove-tmp:
 ```
 
-Open `http://YOUR-HOST:8999/app/`, retrieve the first-run setup code from `docker logs forknook`, and create the administrator account. For remote access, use HTTPS with a reverse proxy. The `/data` volume contains accounts, sessions, recipes, settings, downloaded images and updater state. **Back up the entire `/data` volume** (with a consistent SQLite backup/snapshot); backing up only `forknook.sqlite3` omits photographs. Never discard named volumes during an update.
+Open `http://YOUR-HOST:8999/app/`, retrieve the first-run setup code from `docker logs recipecove`, and create the administrator account. For remote access, use HTTPS with a reverse proxy. The `/data` volume contains accounts, sessions, recipes, settings, downloaded images and updater state. **Back up the entire `/data` volume** (with a consistent SQLite backup/snapshot); backing up only `forknook.sqlite3` omits photographs. Never discard named volumes during an update.
 
 Existing installations should retain the original Compose service key and named volume names; renaming these would create different volumes and hide existing user data. The repository and image addresses have changed, not the persistent storage identifiers.
 
