@@ -2,6 +2,8 @@
   <img src="server/web/recipecove-logo.webp" alt="RecipeCove — your family recipes in one place" width="520">
 </p>
 
+[Calden integration: scoped, revocable meal planning](docs/CALDEN-MEAL-INTEGRATION.md) is available as an unreleased development candidate. RecipeCove remains the authoritative meal-plan store; existing read-only recipe keys remain unchanged.
+
 # RecipeCove · family recipe manager
 
 **Your recipes. One place.**

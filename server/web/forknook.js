@@ -697,11 +697,37 @@ async function renderUpdaterPanel(){
 }
 
 async function renderApiPanel(){
- const keys=await api('/admin/api-keys');const box=card(node('h2',{text:'Developer API for future integrations'}),node('p',{class:'muted',text:'RecipeCove v2 provides a stable, read-only API for published recipes. Keep family notes and unapproved recipes private. API keys are shown only once.'}));
- const field=node('input',{placeholder:'e.g. Website recipe integration'});
- box.append(node('div',{class:'toolbar'},field,button('Create read-only API key',async()=>{if(!field.value.trim())throw Error('Name the API key');const result=await api('/admin/api-keys',{method:'POST',data:{label:field.value}});const message=node('div',{class:'warning'},node('strong',{text:'Copy this key now; it cannot be shown again.'}),node('pre',{class:'evidence-text',text:result.key}));box.append(message,button('Copy key',()=>navigator.clipboard.writeText(result.key)));announce('API key created')},'primary')));
- for(const key of keys)box.append(node('div',{class:'list-row'},node('strong',{text:key.label}),node('span',{class:'small muted',text:key.revoked_at?'Revoked':'Active · '+key.scope}),button('Revoke',async()=>{if(!confirm('Revoke this key immediately?'))return;await api('/admin/api-keys/'+key.id,{method:'DELETE'});renderApiPanel()})));
- box.append(node('h3',{text:'API endpoints'}),node('p',{class:'muted',text:'GET /api/v2/public/recipes?page=1&limit=20  ·  GET /api/v2/public/recipes/{id}  ·  GET /api/v2/openapi.json'}),node('p',{class:'small muted',text:'Send X-RecipeCove-API-Key in the request header. Publication is opt-in and requires an approver.'}));
+ const keys=await api('/admin/api-keys');
+ const box=card(
+   node('h2',{text:'Developer and Calden integrations'}),
+   node('p',{class:'muted',text:'Create a read-only recipe key or a separate Calden meal-plan key. Each has one purpose. Keys are displayed once, and revocation takes effect immediately.'})
+ );
+ const field=node('input',{placeholder:'e.g. Calden household'});
+ const scope=node('select',{});
+ scope.append(node('option',{value:'recipes:read',text:'Published recipes only'}),
+              node('option',{value:'meals:sync',text:'Calden: read recipes and manage meal plans'}));
+ box.append(node('div',{class:'toolbar'},field,scope,button('Create API key',async()=>{
+   if(!field.value.trim())throw Error('Name the API key');
+   const result=await api('/admin/api-keys',{method:'POST',data:{label:field.value,scope:scope.value}});
+   const message=node('div',{class:'warning'},
+      node('strong',{text:'Copy this key now. It cannot be shown again.'}),
+      node('p',{text:'Scope: '+result.scope}),
+      node('pre',{class:'evidence-text',text:result.key}));
+   box.append(message,button('Copy key',()=>navigator.clipboard.writeText(result.key)));
+   announce('Scoped API key created');
+ },'primary')));
+ for(const key of keys){
+  box.append(node('div',{class:'list-row'},node('strong',{text:key.label}),
+    node('span',{class:'small muted',text:key.revoked_at?'Revoked':'Active · '+key.scope}),
+    button('Revoke',async()=>{
+      if(!confirm('Revoke this key immediately?'))return;
+      await api('/admin/api-keys/'+key.id,{method:'DELETE'});
+      renderApiPanel();
+    })));
+ }
+ box.append(node('h3',{text:'Integration endpoints'}),
+  node('p',{class:'muted',text:'Published recipes: GET /api/v2/public/recipes. Calden meal sync: GET /api/v2/integrations/calden/recipes and GET/POST/PUT/DELETE /api/v2/integrations/calden/meal-plan.'}),
+  node('p',{class:'small muted',text:'Send X-Forknook-API-Key in the request header. Calden uses a separate meals:sync key; it cannot be used to access unpublished recipe details or administer RecipeCove.'}));
  content.replaceChildren(adminSectionNav(),box);
 }
 async function renderAdmin(){if(model.user.role!=='admin'){content.replaceChildren(empty('Administrator access required'));return}

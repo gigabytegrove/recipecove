@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 import kitchenowl
 import forknook
 import forknook_features
+import meal_sync
 import forknook_catalog
 import forknook_dataset
 import media
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     kitchenowl.initialize()
     forknook.initialize()
     forknook_features.initialize()
+    meal_sync.initialize()
     # Purge credentials from the removed platform-specific update integration.
     # This affects no family recipes, users, or updater release state.
     (Path(os.environ.get('DATA_DIR', '/data')) / 'updates' / 'dokploy.json').unlink(missing_ok=True)
@@ -358,6 +360,7 @@ async def parse_video(file: UploadFile = File(...), token: str = Depends(token_f
 # deployments and mobile clients continue to function during migration.
 app.include_router(forknook.router)
 app.include_router(forknook_features.router)
+app.include_router(meal_sync.router)
 app.include_router(forknook_catalog.router)
 app.include_router(forknook_dataset.router)
 
