@@ -270,3 +270,7 @@ RecipeCove now has **shared recipe folders** alongside existing categories. A fo
 ## v2.3.9 — Repository and public identity
 
 RecipeCove now links exclusively to [gigabytegrove/recipecove](https://github.com/gigabytegrove/recipecove) for current source and releases. The About screen, public-facing API descriptions, setup messages, feed requests, Docker image metadata and service worker cache use the RecipeCove name. Database filenames, Docker Compose service/volume identifiers in existing deployments, existing API key prefixes and Android application IDs remain unchanged on purpose. Stable releases start at v2.3.0 in the public release history; older application data remains migration-compatible.
+
+## Support Gigabyte Grove
+
+If this project is useful to you, you can support ongoing Gigabyte Grove development with an optional [PayPal donation](https://paypal.me/gigabytegrove). Donations are appreciated but never required to use this repository.
