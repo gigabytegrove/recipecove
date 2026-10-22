@@ -12,12 +12,12 @@ These constraints are requirements, not optional suggestions.
 - Never discard named volumes or existing recipes, users, media, approvals, meal plans, and shopping lists.
 
 ## Product version alignment
-- The web/PWA, server, and native Android app share one stable RecipeCove release number. Do not suffix one client with -alpha unless the owner specifically designates that release as pre-release.
-- Keep the Android versionCode monotonically increasing even when versionName is the same stable release; verify GitHub server and Android builds before marking published.
-- Versioned local Windows APK build instructions must be included with every Android change.
+- The web/PWA, server, and separately maintained private native Android client share one stable RecipeCove release number. Do not suffix one client with -alpha unless the owner specifically designates that release as pre-release.
+- Keep the Android versionCode monotonically increasing even when versionName is the same stable release; verify builds from `gigabytegrove/recipecove-android` independently before marking published.
+- Versioned local Windows APK/AAB build instructions must be maintained in `gigabytegrove/recipecove-android` with every Android change, not in the public server repository.
 
 ## Development discipline
 - Commit each completed, verified pass to GitHub main as directed by the project owner.
 - Run the entire backend and client build/test suites before declaring an update ready; a GitHub workflow failure blocks release readiness claims.
 - Do not remove requested features or introduce unrelated dependencies.
-- Android must progress toward a genuinely native Kotlin client. A WebView wrapper must never be represented as feature-complete native Android.
+- Android implementation belongs to the private `gigabytegrove/recipecove-android` repository; only public API/integration documentation belongs here. Android must progress toward a genuinely native Kotlin client. A WebView wrapper must never be represented as feature-complete native Android.

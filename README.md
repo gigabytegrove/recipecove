@@ -20,7 +20,7 @@ RecipeCove is a standalone, self-hosted family recipe manager published by Gigab
 - Recipes may be imported from structured recipe websites, Facebook and Instagram public videos/reels, feed entries, text, screenshots and uploaded video. Where media is available, local FFmpeg/Whisper/Tesseract extracts caption, speech and on-screen text. Some login-restricted social media cannot be downloaded. Without an optional AI parser, conversational transcripts may require editing. Review the preview before saving.
 - Native photo upload and **automatic recipe photo capture**. Public image URLs are fetched when a recipe is saved, normalized with Pillow and stored in the persistent `/data/recipe-images` folder. Missing/rejected photos do not prevent saving; users may upload a photo manually. Photos from recipe sites, available social thumbnails and accessible KitchenOwl recipe image URLs are supported. Recipe photos are session-protected.
 - Meal planning, recipe-derived shopping lists, check-off and additional manual shopping items, feeds, and an Administration section for migration and app updates.
-- An installable PWA for iPad/iOS Safari with touch-friendly screens and directly bookmarkable routes. Android uses a separate native Kotlin/Compose client, built locally in `android/` with the committed Gradle wrapper and `android/build-apk.ps1` as in Calden.
+- An installable PWA for iPad/iOS Safari with touch-friendly screens and directly bookmarkable routes. Android uses a separate native Kotlin/Compose client maintained in a **private** `gigabytegrove/recipecove-android` repository, with its own Gradle wrapper, Android release process and Play package `com.gigabytegrove.recipecove`.
 - Built-in platform-agnostic server/PWA updater for checksum-verified compatible GitHub Releases (single container, no Docker socket, deployment integration or additional service).
 - Versioned `/api/v2` API with documented OpenAPI contract (`/api/v2/openapi.json`). Administrators can issue revocable, read-only API keys in `/app/admin/api`. API-key holders may read **only** explicitly published recipes and images for future external integrations; family-only recipes, notes, submissions and account data are not exposed.
 
@@ -110,25 +110,13 @@ Only recipes that an approver/admin marks `published: true` are returned. The re
 
 ## Native Kotlin Android client (2.3.9 stable)
 
-RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. It uses the same application ID and higher versionCode for upgrade compatibility, and retains the approved RecipeCove launcher branding.
+RecipeCove's Android client is now a separate native **Kotlin + Jetpack Compose** interface. It uses RecipeCove's `/api/v2` endpoints directly; the Java/WebView wrapper and the old Java-only classes are removed. The Google Play application ID is now `com.gigabytegrove.recipecove`, which intentionally differs from previously distributed APKs using `dev.recipebridge.mobile`; existing users must install the new app and sign in again. The approved RecipeCove launcher branding is retained.
 
 Native screens cover sign-in, the recipe/photo library, full-page recipe details, recipe creation/editing, share-sheet link/text/photo/video preview, personal made/want status, shopping list creation from selected recipes, shopping check-off, meal planning, approval decisions, recipe directory search, categories, family settings, and basic account creation. The first screen reuses an existing stored RecipeCove server URL when possible, but users must sign in again with their RecipeCove account because a WebView session is not interchangeable with a native API token. The product release is designated **stable 2.3.9**, matching the server and web application. Device validation, accessibility polish and fuller native administration remain outstanding and must not be represented as verified simply because the version is stable.
 
-To build on the same Windows PC as Calden, open PowerShell:
+Android source, tests, build tools and Play release metadata are located **only** in the private [RecipeCove Android repository](https://github.com/gigabytegrove/recipecove-android) (requires authorized repository access). Build and signing instructions are in that repository's `README.md` and `GOOGLE_PLAY_RELEASE.md`; the public server repository intentionally contains no Android Gradle project or APK build workflow.
 
-```powershell
-$repo = Join-Path $HOME 'recipecove'
-if (-not (Test-Path "$repo\.git")) { git clone https://github.com/gigabytegrove/recipecove.git $repo }
-Set-Location $repo
-git remote set-url origin https://github.com/gigabytegrove/recipecove.git
-if ($LASTEXITCODE -ne 0) { throw 'Cannot update Git origin.' }
-git pull --ff-only origin main
-if ($LASTEXITCODE -ne 0) { throw 'Git update failed.' }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'android\build-apk.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'Android APK build failed.' }
-```
-
-The local debug APK is `android/app/build/outputs/versioned/RecipeCove-v2.3.9-debug.apk`, with an accompanying SHA-256 checksum. Web/server and Android share the 2.3.9 version designation. Android increments its separate versionCode, and its APK build/signing process remains separate. Locally signed debug APKs only update existing installs signed by the same developer key; Android rejects signature mismatches.
+[RecipeCove Android privacy policy](docs/ANDROID_PRIVACY.md) is publicly available for Google Play users. The server/web release mechanism remains unchanged and independent of Android builds.
 
 ## Tests and limitations
 
@@ -168,7 +156,7 @@ Combined discovery searches use public WordPress REST search APIs from Spend Wit
 
 ## Version alignment
 
-Web/PWA and server release **v2.3.9 stable** and Android **v2.3.9 stable** use matching product versions. The native Android app uses versionCode **29**. Existing Android installations can be upgraded in place when the signing key matches; the legacy application ID remains unchanged to protect existing installs. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
+Web/PWA and server release **v2.3.9 stable** and Android **v2.3.9 stable** use matching product versions. The native Android app uses versionCode **29** in its initial migrated source. The new Play application ID is **`com.gigabytegrove.recipecove`**; previously installed APKs with a different application ID do not upgrade in place and must be reinstalled and signed in again. The Windows build produces a **debug-signed** APK, not a release-signed distributable; stable product versioning does not change that signing distinction. Both platforms continue to have their own automated verification and release artifacts.
 
 
 ### Android branding and safe-area layout (2.3.4)
@@ -185,7 +173,7 @@ Recipe discovery now offers a read-only preview before importing on web and Andr
 
 KitchenOwl re-imports can repair previously missing locally cached photos and restore sectioned Markdown ingredients and instructions when the source provides those fields. Existing edited family recipes are not bulk-overwritten. Migration remains read-only with respect to KitchenOwl. Image restoration is contingent on the source exposing an accessible image URL or authenticated image response; an image cannot be reconstructed when KitchenOwl no longer supplies it.
 
-The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `android/app/build/outputs/versioned/RecipeCove-v2.3.5-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
+The web/server update remains self-contained and platform-independent. Native Android builds are separate and use the committed Gradle wrapper; the APK file generated locally is `app/build/outputs/versioned/ (private Android repository) — RecipeCove-v2.3.5-debug.apk`. CI must complete successfully before the release can be considered published or deployment-ready.
 
 
 ## Release 2.3.4 — web session persistence fix
