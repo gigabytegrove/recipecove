@@ -6,6 +6,19 @@
 
 # RecipeCove · family recipe manager
 
+<!-- GIGABYTE GROVE REPOSITORY BADGES START -->
+<p align="center">
+  <a href="https://github.com/gigabytegrove/recipecove"><img alt="GitHub repository" src="https://img.shields.io/badge/GitHub-Repository-181717?logo=github&logoColor=white"></a>
+  <a href="https://github.com/gigabytegrove/recipecove/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/gigabytegrove/recipecove?style=flat&label=Stars&logo=github"></a>
+  <a href="https://github.com/gigabytegrove/recipecove/issues"><img alt="Issues" src="https://img.shields.io/badge/Issues-View-555555?logo=github"></a>
+  <a href="https://github.com/gigabytegrove/recipecove/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-View-555555?logo=github"></a>
+  <a href="https://paypal.me/gigabytegrove"><img alt="Donate via PayPal" src="https://img.shields.io/badge/Donate-PayPal-0070BA?logo=paypal&logoColor=white"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/gigabytegrove/recipecove">Repository</a> · <a href="https://github.com/gigabytegrove/recipecove/stargazers">Stars</a> · <a href="https://github.com/gigabytegrove/recipecove/issues">Issues</a> · <a href="https://github.com/gigabytegrove/recipecove/releases">Releases</a> · <a href="https://paypal.me/gigabytegrove">Donate via PayPal</a>
+</p>
+<!-- GIGABYTE GROVE REPOSITORY BADGES END -->
+
 **Your recipes. One place.**
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
