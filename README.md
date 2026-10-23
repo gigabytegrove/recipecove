@@ -23,7 +23,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Release: 2.3.9 · stable.** GitHub: https://github.com/gigabytegrove/recipecove
+**Web/server release: v2.4.0 (v2.4) · stable.** Native Android remains on its separately published v2.3.9 build. GitHub: https://github.com/gigabytegrove/recipecove
 
 ## Features
 
@@ -279,6 +279,12 @@ RecipeCove now has **shared recipe folders** alongside existing categories. A fo
 **Android:** The main Recipes screen has horizontal folder/category filter chips. Approvers can create, rename and delete folders and create new categories without going to the web app. When creating or editing a recipe, select one category and any number of folders. Folder and category assignments are visible on the recipe screen.
 
 **Permissions and safety:** Folder browsing works for every signed-in family member. Folder/category creation and folder management follow the existing approver permission. Changing an approved recipe still follows existing contribution/approval rules. Folder deletion removes folder assignments only; recipe content, photos, and other folders remain. Pending recipe submissions preserve folder selections and validate their existence before approval. The existing database and Docker volume are reused, with an additive SQLite table for folder names; no recipe data is reset.
+
+## v2.4 — Tablet Mode for cooking
+
+RecipeCove v2.4 adds **Tablet Mode** to the self-hosted web/PWA experience. Open a recipe and choose **Start Tablet Mode**, or choose **Cook** from the recipes list. This dedicated cooking interface offers ingredient and step checklists, conservative substitution guidance and personal replacements, on-device progress recovery, and responsive portrait/landscape layouts. The built-in keep-awake option uses browser Screen Wake Lock where available; iPad Air 2 users can use Guided Access or the Auto-Lock setting instead.
+
+See [Tablet Mode setup and iPad Air 2 instructions](docs/TABLET-MODE.md). The native Android app is separately maintained and has not been silently replaced or represented as a native v2.4 implementation.
 
 ## v2.3.9 — Repository and public identity
 
