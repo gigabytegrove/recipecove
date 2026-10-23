@@ -388,6 +388,7 @@ def forknook_pwa():
 @app.get("/app/{asset_name}")
 def forknook_asset(asset_name:str):
     names={"forknook.css":"text/css","forknook.js":"text/javascript",
+           "tablet-mode.css":"text/css","tablet-mode.js":"text/javascript",
            "sw.js":"text/javascript", "manifest.json":"application/manifest+json",
            "icon-192.png":"image/png","icon-512.png":"image/png",
            "forknook-logo.png":"image/png", "recipecove-icon.svg":"image/svg+xml", "recipecove-logo.svg":"image/svg+xml", "recipecove-icon.webp":"image/webp", "recipecove-appicon-192.webp":"image/webp", "recipecove-appicon-512.webp":"image/webp", "recipecove-icon.webp":"image/webp", "recipecove-logo.webp":"image/webp"}
@@ -401,7 +402,7 @@ def forknook_asset(asset_name:str):
 
 # Bookmarked and directly loaded SPA routes must return the same app shell.
 # Reject any unknown path instead of making every URL return HTTP 200.
-_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|discover|review|categories|about|admin(?:/(?:users|backups|updates|ai|imports|review|api))?)")
+_FORK_PATH = re.compile(r"(?:home|recipes(?:/[0-9]+)?|tablet/[0-9]+|plan|shopping(?:/[0-9]+)?|sources(?:/[0-9]+)?|discover|review|categories|about|admin(?:/(?:users|backups|updates|ai|imports|review|api))?)")
 
 @app.get("/app/{client_path:path}")
 def forknook_route(client_path: str):
