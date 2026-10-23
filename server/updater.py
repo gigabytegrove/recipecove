@@ -139,11 +139,9 @@ def check() -> dict:
             entry.strip()[:250] for entry in notes[:8]
             if isinstance(entry, str) and entry.strip()
         ] if isinstance(notes, list) else []
-        result['requires_image'] = bool(manifest.get('requires_image'))
-        result['available'] = (
-            not result['requires_image'] and
-            _semver(release['version']) > _semver(result['current_version'])
-        )
+        newer = _semver(release['version']) > _semver(result['current_version'])
+        result['requires_image'] = newer and bool(manifest.get('requires_image'))
+        result['available'] = newer and not result['requires_image']
     except (ValueError, OSError, KeyError, TypeError) as exc:
         result['code_error'] = 'Could not check the published release: ' + type(exc).__name__
     return result
