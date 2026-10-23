@@ -1,0 +1,45 @@
+/* Tablet Mode is intentionally a separate full-screen recipe workspace. */
+body.tablet-mode-active .sidebar,
+body.tablet-mode-active .topbar,
+body.tablet-mode-active .mobile-nav {display:none!important}
+body.tablet-mode-active .main {margin:0!important;min-height:100dvh}
+body.tablet-mode-active .content {max-width:none;padding:0!important}
+body.tablet-mode-active {background:#f7f8f3}
+.tablet-workspace {max-width:1700px;margin:0 auto;padding:clamp(12px,2.5vw,36px) max(16px,env(safe-area-inset-right)) 60px max(16px,env(safe-area-inset-left));color:#233b2b}
+.tablet-header {display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.tablet-headline h1 {font-size:clamp(1.65rem,3vw,2.8rem);line-height:1.13;margin:4px 0 7px;overflow-wrap:anywhere}
+.tablet-eyebrow {font-size:.8rem;letter-spacing:.13em;font-weight:800;color:#c34c37;margin:0}
+.tablet-servings {color:#667a6c;margin:0}
+.tablet-exit {white-space:nowrap;background:#fff}
+.tablet-status {display:grid;gap:7px;margin:20px 0}
+.tablet-progress-label {font-weight:750}
+.tablet-progress {width:100%;height:14px;accent-color:#365c3e}
+.tablet-wake {justify-self:start;font-size:.85rem;min-height:40px;text-align:left;border:0;background:#e5f1e8;color:#174c30}
+.tablet-wake-warning {background:#fff0dc;color:#805123}
+.tablet-storage-warning {color:#a12f23}
+.tablet-grid {display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+.tablet-panel {background:white;border:1px solid #dce3d8;border-radius:18px;padding:clamp(16px,2vw,28px);min-width:0}
+.tablet-panel h2 {font-size:clamp(1.3rem,2vw,1.7rem);margin:0 0 7px}
+.tablet-hint {color:#667a6c;line-height:1.5;font-size:.92rem;margin:0 0 14px}
+.tablet-check-list {display:grid;gap:10px}
+.tablet-item {border:1px solid #dce3d8;border-radius:14px;padding:12px 14px;background:#fff;min-width:0}
+.tablet-item.checked {background:#f0f5ee;border-color:#b4cdb5}
+.tablet-check,.tablet-step {display:flex;gap:13px;align-items:flex-start;font-size:clamp(1.06rem,1.35vw,1.24rem);line-height:1.5;font-weight:600}
+.tablet-check input,.tablet-step input {flex:0 0 auto;width:26px;height:26px;min-height:26px;margin:3px 0 0;accent-color:#365c3e}
+.tablet-check span,.tablet-step-text {overflow-wrap:anywhere}
+.tablet-item.checked .tablet-check span,.tablet-step.checked .tablet-step-text {text-decoration:line-through;color:#718775}
+.tablet-step-number {flex:0 0 32px;border-radius:99px;background:#edf3e9;color:#365c3e;font-size:.95rem;font-weight:800;text-align:center;line-height:31px}
+.tablet-step-text {flex:1}
+.tablet-substitution {margin:7px 0 0 39px}
+.tablet-substitution summary {cursor:pointer;color:#365c3e;font-weight:700;font-size:.85rem;padding:8px 0}
+.tablet-substitution-body {border-top:1px solid #e3eadd;padding:10px 0 0;color:#384f40}
+.tablet-substitution-body p {margin:0 0 9px;line-height:1.5}
+.tablet-caution {font-size:.81rem;color:#805123}
+.tablet-substitution-input {max-width:100%;font-size:.94rem}
+.tablet-empty {color:#667a6c}
+.tablet-footer {display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:24px 0 calc(20px + env(safe-area-inset-bottom))}
+.tablet-footer button {min-height:54px;padding:13px 20px}
+.tablet-reset {background:#fff}
+.tablet-finish {background:#1c432f;border-color:#1c432f;color:white}
+@media (min-width:850px) and (orientation:landscape) {.tablet-grid {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media (max-width:600px) {.tablet-footer button {flex:1 0 100%}.tablet-substitution {margin-left:6px}.tablet-item {padding:11px}}
