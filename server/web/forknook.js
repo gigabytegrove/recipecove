@@ -40,18 +40,19 @@ async function start(){
 }
 $('auth-form').addEventListener('submit',async e=>{e.preventDefault();if(!approveUnsecuredConnection())return;const username=$('username').value.trim(),password=$('password').value;try{const request={username,password};if(model.setup){request.setup_code=$('setup-code').value;request.display_name=$('display-name').value||'Administrator'}const answer=await api(model.setup?'/setup/complete':'/auth/login',{method:'POST',data:request});model.token=answer.token;localStorage.setItem('forknook-token',model.token);sessionStorage.removeItem('forknook-token');$('password').value='';$('setup-code').value='';model.user=await api('/auth/me');await activate()}catch(err){announce(err.message,true)}});
 async function activate(){$('auth').hidden=true;$('shell').hidden=false;$('current-user').textContent=model.user.display_name+' · '+model.user.role;$('admin-nav').hidden=model.user.role!=='admin';await openLocation();if(new URLSearchParams(location.search).has('shared_file')){await navigate('sources');announce('Photo/video received. Tap the file field to attach the shared file, then choose Import file.')}const share=new URLSearchParams(location.search).get('share');if(share){history.replaceState(null,'','/app/sources');await navigate('sources',{push:false});$('import-url').value=share;announce('Shared link received. Select Import from URL to add it.')}}
-async function logout(){for(const url of recipePhotoCache.values())URL.revokeObjectURL(url);recipePhotoCache.clear();try{await api('/auth/logout',{method:'POST'})}catch(e){}model.token='';model.user=null;localStorage.removeItem('forknook-token');sessionStorage.removeItem('forknook-token');start()}
+async function logout(){if(window.RecipeCoveTablet)await window.RecipeCoveTablet.leave();for(const url of recipePhotoCache.values())URL.revokeObjectURL(url);recipePhotoCache.clear();try{await api('/auth/logout',{method:'POST'})}catch(e){}model.token='';model.user=null;localStorage.removeItem('forknook-token');sessionStorage.removeItem('forknook-token');start()}
 $('logout').addEventListener('click',logout);$('mobile-logout').addEventListener('click',logout);
 // Every section has a real URL. Browser back/forward, refresh and copied links work.
-const pagePaths={home:'/app/',recipes:'/app/recipes',plan:'/app/plan',shopping:'/app/shopping',sources:'/app/sources',discover:'/app/discover',categories:'/app/categories',admin:'/app/admin','admin-users':'/app/admin/users','admin-backups':'/app/admin/backups','admin-updates':'/app/admin/updates','admin-ai':'/app/admin/ai','admin-imports':'/app/admin/imports','admin-review':'/app/admin/review','admin-api':'/app/admin/api',review:'/app/review',about:'/app/about'};
-const labels={home:'Your kitchen',recipes:'Recipe collection',plan:'Plan to Make',shopping:'Shopping lists',sources:'Import a recipe',discover:'Discover recipes',categories:'Categories',admin:'Administration','admin-users':'Family accounts','admin-backups':'Backups & migration','admin-updates':'Application updates','admin-ai':'AI settings','admin-imports':'Import & feeds','admin-review':'Recipe approvals','admin-api':'Developer API',review:'My submissions',about:'About RecipeCove'};
-function routeLocation(){const p=location.pathname.replace(/\/$/,'')||'/app';if(p==='/app')return{page:'home'};for(const [name,path] of Object.entries(pagePaths)){if(path.replace(/\/$/,'')===p)return{page:name}}let m=p.match(/^\/app\/recipes\/(\d+)$/);if(m)return{page:'recipes',detail:Number(m[1])};m=p.match(/^\/app\/shopping\/(\d+)$/);if(m)return{page:'shopping',detail:Number(m[1])};m=p.match(/^\/app\/sources\/(\d+)$/);if(m)return{page:'sources',detail:Number(m[1])};return{page:'home'}}
+const pagePaths={home:'/app/',recipes:'/app/recipes',tablet:'/app/tablet',plan:'/app/plan',shopping:'/app/shopping',sources:'/app/sources',discover:'/app/discover',categories:'/app/categories',admin:'/app/admin','admin-users':'/app/admin/users','admin-backups':'/app/admin/backups','admin-updates':'/app/admin/updates','admin-ai':'/app/admin/ai','admin-imports':'/app/admin/imports','admin-review':'/app/admin/review','admin-api':'/app/admin/api',review:'/app/review',about:'/app/about'};
+const labels={home:'Your kitchen',recipes:'Recipe collection',tablet:'Tablet Mode',plan:'Plan to Make',shopping:'Shopping lists',sources:'Import a recipe',discover:'Discover recipes',categories:'Categories',admin:'Administration','admin-users':'Family accounts','admin-backups':'Backups & migration','admin-updates':'Application updates','admin-ai':'AI settings','admin-imports':'Import & feeds','admin-review':'Recipe approvals','admin-api':'Developer API',review:'My submissions',about:'About RecipeCove'};
+function routeLocation(){const p=location.pathname.replace(/\/$/,'')||'/app';if(p==='/app')return{page:'home'};for(const [name,path] of Object.entries(pagePaths)){if(path.replace(/\/$/,'')===p)return{page:name}}let m=p.match(/^\/app\/recipes\/(\d+)$/);if(m)return{page:'recipes',detail:Number(m[1])};m=p.match(/^\/app\/tablet\/(\d+)$/);if(m)return{page:'tablet',detail:Number(m[1])};m=p.match(/^\/app\/shopping\/(\d+)$/);if(m)return{page:'shopping',detail:Number(m[1])};m=p.match(/^\/app\/sources\/(\d+)$/);if(m)return{page:'sources',detail:Number(m[1])};return{page:'home'}}
 function urlFor(page,detail){const base=pagePaths[page]||pagePaths.home;return detail?base+'/'+detail:base}
 async function openLocation(){const route=routeLocation();await navigate(route.page,{push:false,detail:route.detail})}
 window.addEventListener('popstate',async()=>{if($('editor').open)$('editor').close();if(model.user)await openLocation()});
 document.querySelectorAll('[data-page]').forEach(btn=>btn.addEventListener('click',()=>navigate(btn.dataset.page)));
 $('brand-home').addEventListener('click',event=>{event.preventDefault();navigate('home')});
 async function navigate(page,{push=true,detail=null}={}){
+ if(window.RecipeCoveTablet && model.page==='tablet')await window.RecipeCoveTablet.leave();
  if(!pagePaths[page])page='home';
  if(page.startsWith('admin')&&model.user?.role!=='admin')page='home';
  if($('editor').open)$('editor').close();
@@ -61,9 +62,13 @@ async function navigate(page,{push=true,detail=null}={}){
  $('page-title').textContent=labels[page]||'RecipeCove';
  content.replaceChildren(node('div',{class:'empty',text:'Loading…'}));
  try{
-  const routes={home:renderHome,recipes:renderRecipes,plan:renderPlan,shopping:renderShopping,sources:renderSources,discover:renderDiscover,categories:renderCategories,admin:renderAdmin,'admin-users':renderAdmin,'admin-backups':renderAdmin,'admin-updates':renderAdmin,'admin-ai':renderAdmin,'admin-imports':renderAdmin,'admin-review':renderAdmin,'admin-api':renderAdmin,review:renderReview,about:renderAbout};
+  const routes={home:renderHome,recipes:renderRecipes,tablet:async()=>{},plan:renderPlan,shopping:renderShopping,sources:renderSources,discover:renderDiscover,categories:renderCategories,admin:renderAdmin,'admin-users':renderAdmin,'admin-backups':renderAdmin,'admin-updates':renderAdmin,'admin-ai':renderAdmin,'admin-imports':renderAdmin,'admin-review':renderAdmin,'admin-api':renderAdmin,review:renderReview,about:renderAbout};
   await routes[page]();
   if(detail && page==='recipes')await viewRecipe(detail,{push:false});
+   if(page==='tablet'){
+    if(!Number.isSafeInteger(detail)||detail<1)throw Error('A recipe is required for Tablet Mode');
+    await renderTablet(detail);
+   }
   if(detail && page==='shopping')await openShopping(detail,{push:false});
   if(detail && page==='sources'){const all=await api('/feeds');const feed=all.find(x=>x.id===detail);if(feed)await browseFeed(feed,{push:false});else throw Error('Feed not found')}
  }catch(e){content.replaceChildren(node('div',{class:'warning',text:e.message}));announce(e.message,true)}
@@ -161,7 +166,7 @@ async function renderRecipes(){
     node('div',{class:'recipe-tile-copy'},node('h3',{text:r.title}),
       node('p',{class:'recipe-excerpt',text:(r.description||'Open to see ingredients and directions.').slice(0,145)}),
       node('span',{class:'small muted',text:recipeStatus(r)})),
-    node('footer',{},button('View recipe',()=>viewRecipe(r.id),'primary'),button('Want to make',()=>mark(r.id,'want')),button('Made before',()=>mark(r.id,'made'))));
+    node('footer',{},button('View recipe',()=>viewRecipe(r.id),'primary'),button('🍳 Cook',()=>navigate('tablet',{detail:r.id})),button('Want to make',()=>mark(r.id,'want')),button('Made before',()=>mark(r.id,'made'))));
    tile.classList.add('recipe-tile');
    const picture=node('div',{class:'recipe-tile-photo'},node('span',{class:'recipe-placeholder',text:'🍽️'}));
    tile.insertBefore(picture,tile.firstChild);
@@ -184,6 +189,17 @@ async function renderRecipes(){
      announce('Shopping list created');await navigate('shopping');
    },'accent'),selectedInfo);
  content.replaceChildren(toolbar,actions,count,grid);draw();
+}
+
+async function renderTablet(id){
+ const recipe=await api('/recipes/'+id);
+ await window.RecipeCoveTablet.open(recipe,{
+  root:content,
+  namespace:String(model.user.id||model.user.username||model.user.display_name||'user'),
+  back:()=>navigate('recipes',{detail:id}),
+  finish:()=>api('/recipes/'+id+'/state',{method:'PUT',data:{state:'made'}}),
+  error:message=>announce(message,true)
+ });
 }
 
 async function viewRecipe(id,{push=true}={}){
@@ -209,7 +225,7 @@ async function viewRecipe(id,{push=true}={}){
  for(const [label,value] of [['Servings',item.servings],['Prep time',item.prep_time!=null?item.prep_time+' min':null],['Cook time',item.cook_time!=null?item.cook_time+' min':null],['Total time',item.total_time!=null?item.total_time+' min':null]]){
   if(value)facts.append(node('div',{class:'recipe-fact'},node('span',{text:label}),node('strong',{text:String(value)})));
  }
- const actions=node('div',{class:'recipe-view-actions'},button('← All recipes',()=>navigate('recipes')),
+ const actions=node('div',{class:'recipe-view-actions'},button('← All recipes',()=>navigate('recipes')),button('🍳 Start Tablet Mode',()=>navigate('tablet',{detail:id}),'primary'),
   ...(model.user.role==='admin'||model.user.role==='approver'?[button('Edit recipe',()=>openEditor(id,null,{push:false}),'primary'),
   ...(item.source_url&&/^https?:/i.test(item.source_url)?[button('Recover from original source',async()=>{
     if(!confirm('Read the original recipe website and prepare suggested corrections? Your saved recipe will not change until you review and save it.'))return;
