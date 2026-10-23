@@ -367,9 +367,13 @@ app.include_router(forknook_dataset.router)
 @app.get('/api/v2/openapi.json',include_in_schema=False)
 def forknook_openapi():
     """Stable v2 contract for Android and future WordPress integrations."""
-    routes=[r for r in app.routes if getattr(r,'path','').startswith('/api/v2/') and
-            getattr(r,'include_in_schema',False)]
-    return get_openapi(title='RecipeCove API v2',version=VERSION,routes=routes)
+    # FastAPI 0.137+ nests included routers, so filtering top-level
+    # app.routes hides every v2 endpoint. Generate from the complete route
+    # tree, then expose only the v2 contract in the public schema.
+    schema = get_openapi(title='RecipeCove API v2', version=VERSION, routes=app.routes)
+    schema['paths'] = {path: details for path, details in schema['paths'].items()
+                       if path.startswith('/api/v2/')}
+    return schema
 
 
 _FORK_HEADERS = {
