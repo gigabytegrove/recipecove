@@ -1,6 +1,11 @@
 name: Test and publish RecipeCove Docker
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/build-server.yml'
   push:
     branches: [main]
     paths:
@@ -26,6 +31,7 @@ jobs:
         run: python -m pytest -q server/tests
 
   publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -73,6 +79,21 @@ jobs:
           VERSION="$(python -c 'import json; print(json.load(open("server/update_release.json"))["version"])')"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           mkdir -p dist
+          # Installed v2.3.x updaters still require these legacy PNG filenames.
+          # Generate valid branded PNGs in the release package for compatibility.
+          python -m pip install --disable-pip-version-check --quiet Pillow==11.2.1
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          root = Path("server/web")
+          for source, target in (
+              ("recipecove-appicon-192.webp", "icon-192.png"),
+              ("recipecove-appicon-512.webp", "icon-512.png"),
+              ("recipecove-logo.webp", "forknook-logo.png"),
+          ):
+              with Image.open(root / source) as img:
+                  img.convert("RGBA").save(root / target, format="PNG")
+          PY
           (cd server && tar -czf "../dist/forknook-server-${VERSION}.tar.gz" \
             --exclude='__pycache__' \
             *.py web requirements.txt Dockerfile update_release.json)

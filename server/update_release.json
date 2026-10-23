@@ -1,1 +1,15 @@
-{"version":"2.3.9","channel":"stable","requires_image":false,"release_notes":["Completed the RecipeCove repository branding migration across public API descriptions, errors, discovery requests, documentation, and About.","Aligned server, PWA cache and native Android release versions; retained upgrade-safe database paths, API keys, volumes, and application IDs.","Modernized GitHub project documentation and release distribution while preserving safe in-container updates."]}
+{
+  "version": "2.4.0",
+  "channel": "stable",
+  "requires_image": false,
+  "release_notes": [
+    "NEW — Tablet Mode: launch a full-screen cooking workspace from any recipe or tap Cook in the recipe collection.",
+    "Ingredient and individual instruction checklists remember unfinished progress on the same browser and device.",
+    "Substitutions offer ingredient-specific suggestions, explain limitations, and let you record personal replacements without altering saved recipes.",
+    "Tablet Mode automatically adapts to portrait and landscape, with large touch controls, progress tracking, Reset checklist, and Finish cooking.",
+    "Screen Wake Lock is requested on compatible browsers; older iPads show clear guidance to use Guided Access or the device Auto-Lock setting.",
+    "Improved iPad Home Screen application caching and corrected a missing app-logo asset reference.",
+    "Repaired API-key scope validation that prevented some server builds from starting or passing tests.",
+    "Existing recipes, users, settings, meal plans, shopping lists, and data volumes are preserved. Compatible updates install under Administration → Updates."
+  ]
+}
