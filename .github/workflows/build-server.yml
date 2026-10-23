@@ -29,6 +29,10 @@ jobs:
         run: node --check server/web/forknook.js
       - name: Test backend
         run: python -m pytest -q server/tests
+      - name: Audit pinned Python dependencies before publishing
+        run: |
+          python -m pip install --disable-pip-version-check pip-audit
+          python -m pip_audit -r server/requirements.txt
 
   publish:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -81,7 +85,7 @@ jobs:
           mkdir -p dist
           # Installed v2.3.x updaters still require these legacy PNG filenames.
           # Generate valid branded PNGs in the release package for compatibility.
-          python -m pip install --disable-pip-version-check --quiet Pillow==11.2.1
+          python -m pip install --disable-pip-version-check --quiet Pillow==13.0.0
           python - <<'PY'
           from pathlib import Path
           from PIL import Image
