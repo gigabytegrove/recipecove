@@ -29,7 +29,7 @@ import recipes
 import settings_store
 import updater
 
-VERSION = "2.3.9"
+VERSION = "2.4.0"
 DATA = Path(__file__).parent
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
