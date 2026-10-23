@@ -23,7 +23,7 @@
 
 RecipeCove is a standalone, self-hosted family recipe manager published by Gigabyte Grove. It uses **one low-resource Docker container** for the server, responsive web application, iPad PWA, and API. There is no KitchenOwl authentication or database dependency. The previously developed recipe importer remains integrated with RecipeCove.
 
-**Web/server release: v2.4.0 (v2.4) · stable.** Native Android remains on its separately published v2.3.9 build. GitHub: https://github.com/gigabytegrove/recipecove
+**Web/server release: v2.4.1 security update · Docker image refresh required.** Native Android remains on its separately published v2.3.9 build. GitHub: https://github.com/gigabytegrove/recipecove
 
 ## Features
 
@@ -279,6 +279,14 @@ RecipeCove now has **shared recipe folders** alongside existing categories. A fo
 **Android:** The main Recipes screen has horizontal folder/category filter chips. Approvers can create, rename and delete folders and create new categories without going to the web app. When creating or editing a recipe, select one category and any number of folders. Folder and category assignments are visible on the recipe screen.
 
 **Permissions and safety:** Folder browsing works for every signed-in family member. Folder/category creation and folder management follow the existing approver permission. Changing an approved recipe still follows existing contribution/approval rules. Folder deletion removes folder assignments only; recipe content, photos, and other folders remain. Pending recipe submissions preserve folder selections and validate their existence before approval. The existing database and Docker volume are reused, with an additive SQLite table for folder names; no recipe data is reset.
+
+## v2.4.1 — Security dependency update (Docker image required)
+
+**Security action required for installations running v2.4.0 or earlier:** Redeploy the updated `ghcr.io/gigabytegrove/recipecove:2.4.1` image using your current Compose project, Dokploy application, or existing container manager. Preserve **the exact same `/data` volume**, service identifier, configuration and environment variables. Take a consistent backup before replacing an image. Do not remove the persistent volume.
+
+This is intentionally **not** an in-app-only update. Python packages are installed in the immutable Docker image, so updating application code via Administration → Updates cannot remove vulnerable dependencies. The screen displays the version, security notes and a container-update notice rather than offering a misleading Install button.
+
+The refreshed image updates vulnerable **python-multipart, Pillow, Starlette and cryptography**, plus FastAPI, Uvicorn and Pydantic for compatibility. Both server tests and dependency advisories must pass before a security-patched image may be published. Tablet Mode, recipe data, accounts and normal web/PWA behavior are unchanged.
 
 ## v2.4 — Tablet Mode for cooking
 

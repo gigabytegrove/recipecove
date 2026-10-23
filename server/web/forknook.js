@@ -572,7 +572,7 @@ async function renderUpdaterPanel(){
    newestVersion.textContent=data.latest_version?'v'+data.latest_version:'Unavailable';
    const releaseNotes=Array.isArray(data.release_notes)?data.release_notes.filter(x=>typeof x==='string'&&x.trim()):[];
    notesList.replaceChildren(...releaseNotes.map(text=>node('li',{text})));
-   notesBox.hidden=!data.available||releaseNotes.length===0;
+   notesBox.hidden=!(data.available||data.requires_image)||releaseNotes.length===0;
    releaseLink.hidden=true;
    if(data.release_url){
      try{
@@ -587,7 +587,7 @@ async function renderUpdaterPanel(){
    }else if(data.requires_image){
      setStatus('manual','Manual update needed');
      headline.textContent='A container update is required';
-     explanation.textContent='The new release changes dependencies or the base runtime. Your server cannot safely install it from inside the application. Your recipes and settings stay protected.';
+     explanation.textContent='Security or runtime dependencies have changed. Redeploy the published RecipeCove v'+data.latest_version+' Docker image using your existing container manager, keeping the same persistent data volume. The in-app updater cannot update Python packages installed in the image.';
    }else if(data.available){
      setStatus('available','Update available');
      headline.textContent='A newer version is ready';

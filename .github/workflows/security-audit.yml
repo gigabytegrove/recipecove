@@ -1,4 +1,4 @@
-name: Forknook dependency security audit
+name: RecipeCove dependency security audit
 on:
   workflow_dispatch:
   schedule:

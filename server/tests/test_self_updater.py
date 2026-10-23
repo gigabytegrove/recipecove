@@ -75,3 +75,30 @@ def test_updates_screen_only_offers_native_release_updater():
     assert 'Dokploy' not in script and 'dokploy' not in script
     assert "Update Docker image through" not in script
     assert 'Install update' in script
+
+
+def test_image_security_release_requires_container_update(tmp_path, monkeypatch):
+    monkeypatch.setattr(updater, 'ACTIVE', tmp_path / 'current.json')
+    monkeypatch.setattr(updater, '_IMAGE_VERSION', '2.4.0')
+    monkeypatch.setattr(updater, '_release', lambda: {
+        'version': '2.4.1',
+        'url': 'https://github.com/gigabytegrove/recipecove/releases/tag/v2.4.1'
+    })
+    monkeypatch.setattr(updater, '_https_get',
+                        lambda *args: b'{"version":"2.4.1","requires_image":true}')
+    result = updater.check()
+    assert result['latest_version'] == '2.4.1'
+    assert result['requires_image'] is True and result['available'] is False
+
+
+def test_current_security_image_does_not_show_false_update_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(updater, 'ACTIVE', tmp_path / 'current.json')
+    monkeypatch.setattr(updater, '_IMAGE_VERSION', '2.4.1')
+    monkeypatch.setattr(updater, '_release', lambda: {
+        'version': '2.4.1',
+        'url': 'https://github.com/gigabytegrove/recipecove/releases/tag/v2.4.1'
+    })
+    monkeypatch.setattr(updater, '_https_get',
+                        lambda *args: b'{"version":"2.4.1","requires_image":true}')
+    result = updater.check()
+    assert result['requires_image'] is False and result['available'] is False
