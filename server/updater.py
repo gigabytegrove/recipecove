@@ -188,8 +188,10 @@ def _verified_files(release: dict) -> dict[str, bytes]:
     needed = {'app.py', 'recipes.py', 'media.py', 'kitchenowl.py', 'settings_store.py',
               'transcribe_worker.py', 'updater.py', 'forknook.py', 'outbound_security.py', 'web/index.html',
               'web/forknook.html', 'web/forknook.css', 'web/forknook.js',
-              'web/manifest.json', 'web/sw.js', 'web/icon-192.png',
-              'web/icon-512.png', 'web/forknook-logo.png',
+              'web/tablet-mode.js', 'web/tablet-mode.css',
+              'web/manifest.json', 'web/sw.js',
+              'web/recipecove-appicon-192.webp', 'web/recipecove-appicon-512.webp',
+              'web/recipecove-logo.webp',
               'requirements.txt', 'Dockerfile', 'launcher.py', 'update_release.json'}
     if not needed.issubset(entries):
         raise ValueError('Incomplete server update bundle')
