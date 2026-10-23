@@ -13,8 +13,11 @@ import meal_sync
 
 @pytest.fixture
 def client_with_keys(tmp_path):
-    with patch.object(base,"DATA_DIR",tmp_path),patch.object(base,"DB_FILE",tmp_path/"recipecove.sqlite"),
-         patch.object(base,"CLAIM_FILE",tmp_path/".claim"):
+    with (
+        patch.object(base,"DATA_DIR",tmp_path),
+        patch.object(base,"DB_FILE",tmp_path/"recipecove.sqlite"),
+        patch.object(base,"CLAIM_FILE",tmp_path/".claim"),
+    ):
         base._ATTEMPTS.clear()
         base.initialize()
         features.initialize()
