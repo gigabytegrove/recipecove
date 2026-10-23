@@ -1,15 +1,14 @@
 {
-  "version": "2.4.0",
+  "version": "2.4.1",
   "channel": "stable",
-  "requires_image": false,
+  "requires_image": true,
   "release_notes": [
-    "NEW — Tablet Mode: launch a full-screen cooking workspace from any recipe or tap Cook in the recipe collection.",
-    "Ingredient and individual instruction checklists remember unfinished progress on the same browser and device.",
-    "Substitutions offer ingredient-specific suggestions, explain limitations, and let you record personal replacements without altering saved recipes.",
-    "Tablet Mode automatically adapts to portrait and landscape, with large touch controls, progress tracking, Reset checklist, and Finish cooking.",
-    "Screen Wake Lock is requested on compatible browsers; older iPads show clear guidance to use Guided Access or the device Auto-Lock setting.",
-    "Improved iPad Home Screen application caching and corrected a missing app-logo asset reference.",
-    "Repaired API-key scope validation that prevented some server builds from starting or passing tests.",
-    "Existing recipes, users, settings, meal plans, shopping lists, and data volumes are preserved. Compatible updates install under Administration → Updates."
+    "SECURITY UPDATE — rebuild the RecipeCove Docker image to patch known vulnerable image-upload and multipart request-processing dependencies.",
+    "Upgrade python-multipart 0.0.20 → 0.0.32 to address multipart denial-of-service and parser-differential advisories.",
+    "Upgrade Pillow 11.2.1 → 13.0.0 to address image decoder vulnerabilities and the October 21, 2026 Arrow buffer disclosure advisory.",
+    "Upgrade FastAPI, Starlette, Uvicorn, Pydantic and cryptography to current compatible secure releases.",
+    "Require a passing Python dependency vulnerability audit before future Docker image publication.",
+    "IMPORTANT: This update changes Python dependencies. It cannot be installed through Administration → Updates; redeploy the v2.4.1 Docker image through your normal hosting deployment workflow.",
+    "Existing RecipeCove volumes, recipe data, users, saved sessions, and Tablet Mode functionality are preserved."
   ]
 }
