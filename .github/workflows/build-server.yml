@@ -1,6 +1,11 @@
 name: Test and publish RecipeCove Docker
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/build-server.yml'
   push:
     branches: [main]
     paths:
@@ -26,6 +31,7 @@ jobs:
         run: python -m pytest -q server/tests
 
   publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     permissions:
