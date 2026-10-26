@@ -272,7 +272,7 @@ The Android header now uses the approved transparent RecipeCove vector wordmark 
 
 ## 2.3.7 — Organize recipes with shared folders and categories
 
-RecipeCove now has **shared recipe folders** alongside existing categories. A folder is a named group such as “Jen’s Favorites” or “Holiday Baking”; each recipe may belong to zero, one, or several folders without copying the recipe. Categories still describe the recipe type (for example Dinner or Dessert). All existing recipes remain visible in All Recipes and do not need to be migrated manually.
+RecipeCove now has **shared recipe folders** alongside existing categories. A folder is a named group such as “Family Favorites” or “Holiday Baking”; each recipe may belong to zero, one, or several folders without copying the recipe. Categories still describe the recipe type (for example Dinner or Dessert). All existing recipes remain visible in All Recipes and do not need to be migrated manually.
 
 **Web:** Use Home → Browse your recipes for immediate folder/category shortcuts; Recipes has Folder, Category, Status, and Search filters. Use **Manage folders & categories** to create, rename, delete or browse a folder. The recipe editor supports multiple folder checkboxes, and recipe details show their folder badges.
 
